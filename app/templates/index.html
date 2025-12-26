@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eleviro - AI Job Application Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Eleviro</h1>
+            <p>Accelerate your career with AI-powered application assistance.</p>
+        </header>
+
+        <main>
+            <section class="input-section">
+                <form id="job-form">
+                    <!-- Job Description Input -->
+                    <div class="form-group">
+                        <label>Job Description</label>
+                        <div class="tabs">
+                            <button type="button" class="tab-btn" data-target="job-text-input">Text</button>
+                            <button type="button" class="tab-btn active" data-target="job-url-input">URL</button>
+                        </div>
+                        <div id="job-text-input" class="tab-content">
+                            <textarea id="job-description" name="job_description"
+                                placeholder="Paste the job description here..."></textarea>
+                        </div>
+                        <div id="job-url-input" class="tab-content active">
+                            <input type="url" id="job-url" name="job_url" placeholder="https://linkedin.com/jobs/..."
+                                class="text-input">
+                        </div>
+                    </div>
+
+                    <!-- Resume Input -->
+                    <div class="form-group">
+                        <label>Your Resume</label>
+                        <div class="tabs">
+                            <button type="button" class="tab-btn" data-target="resume-text-input">Text</button>
+                            <button type="button" class="tab-btn active" data-target="resume-file-input">Upload
+                                File</button>
+                        </div>
+                        <div id="resume-text-input" class="tab-content">
+                            <textarea id="resume-text" name="resume_text"
+                                placeholder="Paste your resume text here..."></textarea>
+                        </div>
+                        <div id="resume-file-input" class="tab-content active">
+                            <div class="file-upload-wrapper">
+                                <input type="file" id="resume-file" name="resume_file" accept=".pdf,.docx">
+                                <p class="file-hint">Supported formats: PDF, DOCX</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submit-btn">
+                        <span class="btn-text">Generate Application Pack</span>
+                        <span class="loader hidden"></span>
+                    </button>
+                </form>
+            </section>
+
+            <section id="results-section" class="results-section hidden">
+                <div class="result-card">
+                    <h2>Job Summary</h2>
+                    <div id="job-summary-content" class="content-box"></div>
+                </div>
+
+                <div class="result-card">
+                    <h2>Company Overview</h2>
+                    <div id="company-summary-content" class="content-box"></div>
+                </div>
+
+                <div class="result-card">
+                    <div class="card-header">
+                        <h2>Adapted Resume</h2>
+                        <button class="download-btn" data-type="resume">Download Word</button>
+                    </div>
+                    <div id="adapted-resume-content" class="content-box"></div>
+                </div>
+
+                <div class="result-card">
+                    <div class="card-header">
+                        <h2>Cover Letter</h2>
+                        <button class="download-btn" data-type="cover-letter">Download Word</button>
+                    </div>
+                    <div id="cover-letter-content" class="content-box"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/js/main.js"></script>
+</body>
+
+</html>
