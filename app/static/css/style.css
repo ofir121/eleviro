@@ -254,3 +254,317 @@ button:active {
         transform: translateY(0);
     }
 }
+
+/* Suggestion Cards */
+.suggestions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+/* Suggestion Navigation */
+.suggestion-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.nav-counter {
+    font-weight: 600;
+    color: var(--accent-color);
+    font-size: 1rem;
+}
+
+.nav-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.nav-btn {
+    background-color: rgba(56, 189, 248, 0.15);
+    border: 1px solid var(--accent-color);
+    color: var(--accent-color);
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 0.5rem;
+    width: auto;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.nav-btn:hover:not(:disabled) {
+    background-color: rgba(56, 189, 248, 0.25);
+}
+
+.nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+
+.suggestion-card {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    transition: all 0.3s ease;
+}
+
+.suggestion-card:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+}
+
+.suggestion-card.accepted {
+    border-color: #10b981;
+    background-color: rgba(16, 185, 129, 0.05);
+}
+
+.suggestion-card.rejected {
+    opacity: 0.5;
+    border-color: var(--border-color);
+}
+
+.suggestion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.section-badge {
+    background-color: rgba(56, 189, 248, 0.2);
+    color: var(--accent-color);
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.priority-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.priority-high {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.priority-medium {
+    background-color: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.priority-low {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.diff-view {
+    background-color: var(--card-bg);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.original-text {
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.original-text del {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    text-decoration: line-through;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+}
+
+.arrow {
+    color: var(--accent-color);
+    font-size: 1.25rem;
+    margin: 0.5rem 0;
+    text-align: center;
+}
+
+.suggested-text ins {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    text-decoration: none;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+}
+
+.reason {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    padding-left: 0.5rem;
+    border-left: 2px solid var(--accent-color);
+}
+
+.reason strong {
+    color: var(--text-primary);
+}
+
+.actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.accept-btn,
+.reject-btn {
+    flex: 1;
+    padding: 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: auto;
+}
+
+.accept-btn {
+    background-color: rgba(16, 185, 129, 0.15);
+    border: 1px solid #10b981;
+    color: #10b981;
+}
+
+.accept-btn:hover {
+    background-color: rgba(16, 185, 129, 0.25);
+}
+
+.accept-btn.active {
+    background-color: #10b981;
+    color: white;
+}
+
+.reject-btn {
+    background-color: rgba(239, 68, 68, 0.15);
+    border: 1px solid #ef4444;
+    color: #ef4444;
+}
+
+.reject-btn:hover {
+    background-color: rgba(239, 68, 68, 0.25);
+}
+
+.reject-btn.active {
+    background-color: #ef4444;
+    color: white;
+}
+
+/* Bulk Actions */
+.bulk-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.action-btn {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 0.5rem;
+    width: auto;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.accept-all-btn:hover {
+    border-color: #10b981;
+    color: #10b981;
+}
+
+.reject-all-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* Preview Section */
+.preview-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.preview-section h3 {
+    color: var(--accent-color);
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+
+.preview-box {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.preview-box::-webkit-scrollbar {
+    width: 8px;
+}
+
+.preview-box::-webkit-scrollbar-track {
+    background: var(--card-bg);
+    border-radius: 4px;
+}
+
+.preview-box::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.preview-box::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-color);
+}
+
+/* Empty state */
+.empty-suggestions {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+.empty-suggestions p {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Logo Styles */
+.logo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.logo {
+    height: 60px;
+    width: auto;
+}
+
+header h1 {
+    margin: 0;
+    /* Remove default margin to align with logo */
+}

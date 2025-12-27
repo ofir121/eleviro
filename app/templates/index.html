@@ -9,13 +9,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/markdown.css">
+    <link rel="icon" type="image/png" href="/static/images/logo.png">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>Eleviro</h1>
+            <div class="logo-container">
+                <img src="/static/images/logo.png" alt="Eleviro Logo" class="logo">
+                <h1>Eleviro</h1>
+            </div>
             <p>Accelerate your career with AI-powered application assistance.</p>
         </header>
 
@@ -53,8 +58,8 @@
                         </div>
                         <div id="resume-file-input" class="tab-content active">
                             <div class="file-upload-wrapper">
-                                <input type="file" id="resume-file" name="resume_file" accept=".pdf,.docx">
-                                <p class="file-hint">Supported formats: PDF, DOCX</p>
+                                <input type="file" id="resume-file" name="resume_file" accept=".pdf">
+                                <p class="file-hint">Supported formats: PDF</p>
                             </div>
                         </div>
                     </div>
@@ -79,10 +84,31 @@
 
                 <div class="result-card">
                     <div class="card-header">
-                        <h2>Adapted Resume</h2>
-                        <button class="download-btn" data-type="resume">Download Word</button>
+                        <h2>Resume Suggestions</h2>
+                        <div class="bulk-actions">
+                            <button class="action-btn accept-all-btn">✓ Accept All</button>
+                            <button class="action-btn reject-all-btn">✗ Reject All</button>
+                            <button class="download-btn" id="download-adapted-resume">Download Adapted Resume</button>
+                        </div>
                     </div>
-                    <div id="adapted-resume-content" class="content-box"></div>
+
+                    <!-- Navigation Controls -->
+                    <div class="suggestion-navigation hidden" id="suggestion-navigation">
+                        <div class="nav-counter" id="nav-counter">Change 1 of 0</div>
+                        <div class="nav-buttons">
+                            <button type="button" class="nav-btn" id="prev-btn">← Previous</button>
+                            <button type="button" class="nav-btn" id="next-btn">Next →</button>
+                        </div>
+                    </div>
+
+                    <div id="suggestions-container" class="suggestions-container">
+                        <!-- Suggestions will be dynamically inserted here -->
+                    </div>
+
+                    <div class="preview-section">
+                        <h3>Preview with Accepted Changes</h3>
+                        <div id="resume-preview" class="content-box preview-box"></div>
+                    </div>
                 </div>
 
                 <div class="result-card">

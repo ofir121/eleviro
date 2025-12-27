@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, Form, HTTPException, UploadFile, File, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from app.services import ai_service
 from app.utils import parsers, generators
+from app.models.suggestions import ResumeSuggestion, SuggestionResponse, ApplyChangesRequest
 import io
+import json
+import re
 
 router = APIRouter(
     prefix="/api",
@@ -31,15 +34,15 @@ async def process_job(
 
     # 2. Get Resume Text
     final_resume_text = ""
-    if resume_file:
+    if resume_text:
+        final_resume_text = resume_text
+    elif resume_file and resume_file.filename:  # Check if file actually has a filename
         if resume_file.filename.endswith(".pdf"):
             final_resume_text = await parsers.parse_pdf(resume_file)
         elif resume_file.filename.endswith(".docx"):
             final_resume_text = await parsers.parse_docx(resume_file)
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF or DOCX.")
-    elif resume_text:
-        final_resume_text = resume_text
     else:
         raise HTTPException(status_code=400, detail="Please provide either Resume text or upload a file.")
 
@@ -49,13 +52,30 @@ async def process_job(
     # Run AI tasks
     job_summary = ai_service.summarize_job(final_job_desc)
     company_summary = ai_service.summarize_company(final_job_desc)
-    adapted_resume = ai_service.adapt_resume(final_resume_text, final_job_desc)
+    
+    # Get resume suggestions (new approach)
+    resume_suggestions_json = ai_service.suggest_resume_changes(final_resume_text, final_job_desc)
+    
+    # Parse JSON response
+    try:
+        suggestions_data = json.loads(resume_suggestions_json)
+        resume_suggestions = suggestions_data.get("suggestions", [])
+    except json.JSONDecodeError as e:
+        print(f"Error parsing suggestions JSON: {e}")
+        print(f"Raw response: {resume_suggestions_json}")
+        # Fallback to empty suggestions if parsing fails
+        resume_suggestions = []
+    
+    # Format the resume with correct section order
+    formatted_resume_text = ai_service.format_resume(final_resume_text)
+    
     cover_letter = ai_service.generate_cover_letter(final_resume_text, final_job_desc)
 
     return {
         "job_summary": job_summary,
         "company_summary": company_summary,
-        "adapted_resume": adapted_resume,
+        "resume_suggestions": resume_suggestions,
+        "original_resume": formatted_resume_text,  # Use formatted version
         "cover_letter": cover_letter
     }
 
@@ -68,5 +88,69 @@ async def download_document(
     return StreamingResponse(
         file_stream,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename={filename}.docx"}
+        headers={"Content-Disposition": f'attachment; filename="{filename}.docx"'}
     )
+
+@router.post("/apply-changes")
+async def apply_changes(request: ApplyChangesRequest):
+    """
+    Apply selected resume suggestions to the original resume text.
+    """
+    modified_resume = request.original_resume
+    
+    # Create a mapping of suggestion IDs to suggestions
+    suggestions_dict = {s.id: s for s in request.all_suggestions}
+    
+    # Get only the accepted suggestions
+    accepted_suggestions = [
+        suggestions_dict[sid] for sid in request.accepted_suggestion_ids 
+        if sid in suggestions_dict
+    ]
+    
+    # Sort by position in text (to avoid replacement conflicts)
+    # Find each original_text position and sort
+    suggestions_with_pos = []
+    for suggestion in accepted_suggestions:
+        # Use regex to handle whitespace variations
+        pattern = re.escape(suggestion.original_text)
+        pattern = re.sub(r'\\\s+', r'\\s+', pattern)  # Allow flexible whitespace
+        
+        match = re.search(pattern, modified_resume, re.IGNORECASE)
+        if match:
+            suggestions_with_pos.append((match.start(), suggestion))
+    
+    # Sort by position (descending) to avoid index shifting
+    suggestions_with_pos.sort(key=lambda x: x[0], reverse=True)
+    
+    # Apply replacements
+    replacements_made = 0
+    for pos, suggestion in suggestions_with_pos:
+        # Use regex for more flexible matching
+        pattern = re.escape(suggestion.original_text)
+        pattern = re.sub(r'\\\s+', r'\\s+', pattern)
+        
+        # Replace only the first occurrence (which should be at the position we found)
+        # If suggested_text is empty (deletion), remove the entire bullet point line
+        if not suggestion.suggested_text.strip():
+            full_line_pattern = r'^\s*[-*]\s*' + pattern + r'\s*$'
+            new_resume, count = re.subn(full_line_pattern, '', modified_resume, count=1, flags=re.IGNORECASE | re.MULTILINE)
+            if count > 0:
+                modified_resume = new_resume
+            else:
+                modified_resume = re.sub(pattern, '', modified_resume, count=1, flags=re.IGNORECASE)
+        else:
+            modified_resume = re.sub(
+                pattern, 
+                suggestion.suggested_text, 
+                modified_resume, 
+                count=1,
+                flags=re.IGNORECASE
+            )
+        replacements_made += 1
+    
+    return {
+        "modified_resume": modified_resume,
+        "replacements_made": replacements_made,
+        "total_accepted": len(request.accepted_suggestion_ids)
+    }
+
