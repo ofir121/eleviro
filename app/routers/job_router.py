@@ -8,6 +8,7 @@ from app.models.suggestions import ResumeSuggestion, SuggestionResponse, ApplyCh
 import io
 import json
 import re
+import asyncio
 
 router = APIRouter(
     prefix="/api",
@@ -19,7 +20,8 @@ async def process_job(
     job_description: Optional[str] = Form(None),
     job_url: Optional[str] = Form(None),
     resume_text: Optional[str] = Form(None),
-    resume_file: Optional[UploadFile] = File(None)
+    resume_file: Optional[UploadFile] = File(None),
+    is_testing_mode: bool = Form(True)
 ):
     # 1. Get Job Description
     final_job_desc = ""
@@ -49,12 +51,20 @@ async def process_job(
     if not final_job_desc or not final_resume_text:
          raise HTTPException(status_code=400, detail="Could not extract text from inputs.")
 
-    # Run AI tasks
-    job_summary = ai_service.summarize_job(final_job_desc)
-    company_summary = ai_service.summarize_company(final_job_desc)
+    # First, format the resume to get a clean markdown version
+    # This needs to run first because suggest_resume_changes needs to match against this text
+    formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
     
-    # Get resume suggestions (new approach)
-    resume_suggestions_json = ai_service.suggest_resume_changes(final_resume_text, final_job_desc)
+    # Now run remaining AI tasks concurrently
+    # Use formatted_resume_text for suggestions so original_text matches what we'll display/download
+    results = await asyncio.gather(
+        ai_service.summarize_job(final_job_desc, is_testing_mode),
+        ai_service.summarize_company(final_job_desc, is_testing_mode),
+        ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode),
+        ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode)
+    )
+
+    job_summary, company_summary, resume_suggestions_json, cover_letter = results
     
     # Parse JSON response
     try:
@@ -65,11 +75,6 @@ async def process_job(
         print(f"Raw response: {resume_suggestions_json}")
         # Fallback to empty suggestions if parsing fails
         resume_suggestions = []
-    
-    # Format the resume with correct section order
-    formatted_resume_text = ai_service.format_resume(final_resume_text)
-    
-    cover_letter = ai_service.generate_cover_letter(final_resume_text, final_job_desc)
 
     return {
         "job_summary": job_summary,

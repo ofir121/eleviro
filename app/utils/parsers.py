@@ -5,28 +5,79 @@ from pypdf import PdfReader
 from docx import Document
 from fastapi import UploadFile
 
+import re
+
+def clean_pdf_text(text: str) -> str:
+    """
+    Clean up PDF extracted text by joining mid-sentence line breaks.
+    PDFs often break lines mid-sentence for layout, which we need to fix.
+    """
+    # First, normalize multiple spaces to single space
+    text = re.sub(r' +', ' ', text)
+    
+    # Replace single newlines (not followed by another newline) with space
+    # This joins mid-sentence breaks while preserving paragraph breaks (double newlines)
+    # But we need to be careful: some single newlines are meaningful (bullet points, headers)
+    
+    # Strategy: Replace \n with space UNLESS:
+    # 1. It's followed by another \n (paragraph break)
+    # 2. It's followed by a bullet point (- or * or •)
+    # 3. It's followed by a heading marker (#)
+    # 4. The previous line ends with a colon (indicating a list follows)
+    
+    lines = text.split('\n')
+    result = []
+    
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            # Empty line = paragraph break
+            result.append('\n')
+            continue
+            
+        # Check if this line starts with a special marker
+        is_special_start = (
+            line.startswith('-') or 
+            line.startswith('*') or 
+            line.startswith('•') or
+            line.startswith('#') or
+            re.match(r'^\d+\.', line)  # Numbered list
+        )
+        
+        if result and result[-1] != '\n':
+            # Previous line wasn't a paragraph break
+            prev_line = result[-1] if result else ''
+            prev_ends_with_colon = prev_line.rstrip().endswith(':')
+            
+            if is_special_start or prev_ends_with_colon:
+                # Keep as separate line
+                result.append('\n')
+                result.append(line)
+            else:
+                # Join with previous line
+                result.append(' ')
+                result.append(line)
+        else:
+            result.append(line)
+    
+    cleaned = ''.join(result)
+    # Clean up any resulting multiple spaces
+    cleaned = re.sub(r' +', ' ', cleaned)
+    # Clean up multiple newlines to max 2
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
 async def parse_pdf(file: UploadFile) -> str:
     content = await file.read()
     pdf_file = io.BytesIO(content)
     reader = PdfReader(pdf_file)
     text = ""
-    links = []
     
     for page in reader.pages:
         text += page.extract_text() + "\n"
-        
-        # Extract links
-        if "/Annots" in page:
-            for annot in page["/Annots"]:
-                obj = annot.get_object()
-                if "/A" in obj and "/URI" in obj["/A"]:
-                    uri = obj["/A"]["/URI"]
-                    links.append(uri)
     
-    if links:
-        text += "\n\n## Extracted Links\n"
-        for link in set(links): # Deduplicate
-            text += f"- {link}\n"
+    # Clean up the extracted text
+    text = clean_pdf_text(text)
             
     return text
 

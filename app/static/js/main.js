@@ -342,6 +342,10 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.delete('job_url');
         }
 
+        // Add testing mode flag
+        const isTestingMode = document.getElementById('testing-mode').checked;
+        formData.append('is_testing_mode', isTestingMode);
+
         try {
             const response = await fetch('/api/process-job', {
                 method: 'POST',

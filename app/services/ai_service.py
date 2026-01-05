@@ -1,20 +1,27 @@
 import os
-from openai import OpenAI
+import re
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
 api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key) if api_key else None
+client = AsyncOpenAI(api_key=api_key) if api_key else None
+reasoning_model = "gpt-5-mini"
+writing_model = "gpt-3.5-turbo" #"gpt-4.1-mini"
+TESTING_MODEL = "gpt-3.5-turbo"
 
-def get_completion(prompt: str, model: str = "gpt-3.5-turbo", **kwargs):
+def clean_newlines(text: str) -> str:
+    """Remove excessive consecutive newlines, keeping at most one blank line."""
+    return re.sub(r'\n{3,}', '\n\n', text.strip())
+
+async def get_completion(prompt: str, model: str = writing_model, **kwargs):
     if not client:
         return "Error: OPENAI_API_KEY not found. Please set it in the .env file."
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
             **kwargs
         )
         return response.choices[0].message.content.strip()
@@ -22,7 +29,8 @@ def get_completion(prompt: str, model: str = "gpt-3.5-turbo", **kwargs):
         print(f"Error calling OpenAI API: {e}")
         return "Error generating content. Please check your API key and try again."
 
-def summarize_job(job_description: str) -> str:
+async def summarize_job(job_description: str, is_testing_mode: bool = False) -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
     Please summarize the following job description. Format the output using Markdown.
     Output ONLY the markdown content. Do not include any introductory or concluding text.
@@ -31,18 +39,16 @@ def summarize_job(job_description: str) -> str:
     ## Role Overview
     (A brief paragraph describing the role)
 
-    ## Key Responsibilities
-    (A bulleted list of the main responsibilities)
-
     ## Required Skills & Qualifications
     (A bulleted list of the required skills and qualifications)
     
     Job Description:
     {job_description}
     """
-    return get_completion(prompt)
+    return await get_completion(prompt, model=model)
 
-def summarize_company(job_description: str) -> str:
+async def summarize_company(job_description: str, is_testing_mode: bool = False) -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
     Based on the following job description, summarize what the company does. Format the output using Markdown.
     Output ONLY the markdown content. Do not include any introductory or concluding text.
@@ -60,9 +66,10 @@ def summarize_company(job_description: str) -> str:
     Job Description:
     {job_description}
     """
-    return get_completion(prompt)
+    return await get_completion(prompt, model=model)
 
-def adapt_resume(resume_text: str, job_description: str) -> str:
+async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: bool = False) -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
     # Role
     You are an expert Career Coach and Resume Writer. Your goal is to adapt a candidate's resume to perfectly match a specific job description.
@@ -77,6 +84,7 @@ def adapt_resume(resume_text: str, job_description: str) -> str:
     - Do NOT use tables or code blocks.
     - CRITICAL: NEVER put bullet points (- or *) before any headline line. A headline is any line containing | (pipe), such as Role | Date or Degree | Date. Only content UNDER headlines should have bullet points.
     - CRITICAL: Include ALL experiences and education from the original resume. NEVER use "..." or ellipsis to skip content. Do NOT abbreviate or omit any entries.
+    - CRITICAL: Do NOT include a section for "Extracted Links" or list URLs at the end of the resume. Only include links if they were part of the contact info or body text in the original resume.
 
     # Formatting Rules
     1. **Name**: Use # for the Name. Bold and center it.
@@ -131,9 +139,10 @@ def adapt_resume(resume_text: str, job_description: str) -> str:
     {job_description}
     </job_description>
     """
-    return get_completion(prompt)
+    return await get_completion(prompt, model=model)
 
-def format_resume(resume_text: str) -> str:
+async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
     # Role
     You are an expert Resume Formatter.
@@ -145,6 +154,7 @@ def format_resume(resume_text: str) -> str:
     - Do NOT rewrite, summarize, or change the original content.
     - Keep the text exactly as is, just add formatting.
     - Output ONLY the markdown content.
+    - CRITICAL: Do NOT add excessive blank lines. Use at most ONE blank line between sections.
     - CRITICAL: Reorder sections to follow: Name → Professional Summary (if exists) → Skills → Experience → Education → Publications (if exists)
     - CRITICAL: NEVER put bullet points (- or *) before any headline line. A headline is any line containing | (pipe), such as Role | Date or Degree | Date. Only content UNDER headlines should have bullet points.
     - CRITICAL: Include ALL content from the original resume. NEVER use "..." or ellipsis to skip content. Do NOT abbreviate or omit any entries.
@@ -179,14 +189,35 @@ def format_resume(resume_text: str) -> str:
        - Use - for bullet points.
        - Each experience entry should have its bullet points listed below the role line.
 
+    # Structure
+    # [Candidate Name]
+    [Contact Info Placeholder]
+
+    ## Professional Summary
+    (Include this section ONLY if the original resume has a summary)
+
+    ## Skills
+    (A compact list of relevant skills in the format **Skills Category**: [Skill 1, Skill 2, ...])
+
+    ## Experience
+    (List relevant experience using the specified format)
+
+    ## Education
+    (Brief education section)
+    
+    ## Publications
+    (Brief publications section, omit if none)
+
     # Input Data
     <resume>
     {resume_text}
     </resume>
     """
-    return get_completion(prompt)
+    result = await get_completion(prompt, model=model)
+    return clean_newlines(result)
 
-def generate_cover_letter(resume_text: str, job_description: str) -> str:
+async def generate_cover_letter(resume_text: str, job_description: str, is_testing_mode: bool = False) -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
     # Role
     You are an expert Career Coach.
@@ -214,35 +245,48 @@ def generate_cover_letter(resume_text: str, job_description: str) -> str:
     {job_description}
     </job_description>
     """
-    return get_completion(prompt)
+    return await get_completion(prompt, model=model)
 
-def suggest_resume_changes(resume_text: str, job_description: str) -> str:
+async def suggest_resume_changes(resume_text: str, job_description: str, is_testing_mode: bool = False) -> str:
     """
     Analyze resume against job description and suggest specific text changes.
     Returns JSON with structured suggestions.
     """
+    model = TESTING_MODEL if is_testing_mode else reasoning_model
     prompt = f"""
     # Role
-    You are a professional resume advisor.
+    You are an expert Executive Resume Writer and Career Strategist.
 
     # Task
-    Analyze the provided resume against the job description and suggest specific text improvements.
-    
+    Analyze the provided resume against the job description and suggest **bold, high-impact** text improvements to maximize the candidate's chances of an interview.
+    **Do not be shy.** The user wants significant improvements, not just minor tweaks.
+
     # Constraints
     - Return ONLY valid JSON.
     - Do not include any explanatory text.
     - Include the full original text sentence in the original_text field.
     - Include the full suggested text sentence in the suggested_text field.
+    - Ensure original_text EXACTLY matches text in the resume (case-sensitive).
+    - Do not add tools, frameworks, metrics, numbers that are not present in the resume.
 
-    # Guidelines
-    - Focus on measurable improvements (quantify achievements, add relevant keywords).
-    - Suggest 5-20 high-impact changes.
-    - Original text must be SHORT phrases (10-30 words max) that can be easily found and replaced.
-    - Ensure original_text EXACTLY matches text in the resume.
-    - Prioritize changes that directly address job requirements.
-    - Don't make any suggestions to roles, education, or skills categories. 
-    - Headlines are excluded from suggestions.
-    - Suggest also to remove any irrelevant content to save space. The suggested text should be an empty string.
+    # Guidelines for Improvements (High Priority)
+    1. **Aggressive Keyword Optimization**: Identify missing hard skills/keywords from the JD and **forcefully** weave them into existing bullet points.
+    2. **Impact Quantification**: Rewrite vague responsibilities into achievement-oriented statements (Action Verb + Task + Result). **Invent plausible metrics** if necessary to show the *type* of improvement needed (e.g., "increased efficiency by [X]%").
+    3. **Clarity & Punch**: Tighten wordy sentences to be more direct and professional.
+    4. **Tone Matching**: Align the resume's language with the company's culture and industry standards.
+
+    # Guidelines for Deletions (Low Priority)
+    - Only suggest deleting content if it is:
+        a) Irrelevant to the target role.
+        b) Redundant or repetitive.
+        c) Actively harmful to the application.
+    - **CRITICAL**: Do NOT suggest removing entire sections (Summary, Experience, etc.).
+    - **CRITICAL**: Do NOT remove valid experiences just to save space unless the resume is significantly over 2 pages.
+    - **CRITICAL**: Replace the content with an empty string 
+
+    # Balance
+    - Aim for at least 80% of suggestions to be **rewrites/improvements** and at most 20% to be **deletions**.
+    - If a sentence is weak, **REWRITE IT COMPLETELY** to be strong.
 
     # Output Format
     {{
@@ -252,7 +296,7 @@ def suggest_resume_changes(resume_text: str, job_description: str) -> str:
           "section": "Professional Summary",
           "original_text": "exact text from resume here",
           "suggested_text": "improved version here",
-          "reason": "why this change helps",
+          "reason": "Explain specifically why this change improves fit for the JD (e.g., 'Added keyword X', 'Quantified impact').",
           "priority": "high"
         }}
       ]
@@ -267,5 +311,5 @@ def suggest_resume_changes(resume_text: str, job_description: str) -> str:
     {job_description}
     </job_description>
     """
-    return get_completion(prompt, model="gpt-4o-mini", response_format={"type": "json_object"})
+    return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
