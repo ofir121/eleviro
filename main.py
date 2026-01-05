@@ -4,17 +4,25 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
 
 app = FastAPI(title="Job Application AI Platform")
 
+# Get base directory for absolute paths
+BASE_DIR = Path(__file__).resolve().parent
+
 # Mount static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app/static")), name="static")
 
 # Templates
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(BASE_DIR / "app/templates"))
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
