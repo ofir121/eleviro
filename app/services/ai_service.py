@@ -268,6 +268,7 @@ async def suggest_resume_changes(resume_text: str, job_description: str, is_test
     - Include the full suggested text sentence in the suggested_text field.
     - Ensure original_text EXACTLY matches text in the resume (case-sensitive).
     - Do not add tools, frameworks, metrics, numbers that are not present in the resume.
+    - Do NOT use "<" or ">" symbols in the output content. Use "less than" or "more than" instead to avoid parsing issues.
 
     # Guidelines for Improvements (High Priority)
     1. **Aggressive Keyword Optimization**: Identify missing hard skills/keywords from the JD and **forcefully** weave them into existing bullet points.
