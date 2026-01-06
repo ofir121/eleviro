@@ -32,41 +32,94 @@ async def get_completion(prompt: str, model: str = writing_model, **kwargs):
 async def summarize_job(job_description: str, is_testing_mode: bool = False) -> str:
     model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
-    Please summarize the following job description. Format the output using Markdown.
-    Output ONLY the markdown content. Do not include any introductory or concluding text.
-    Structure the summary with the following sections:
+    Please provide a structured, executive summary of the following job description. 
+    The goal is to give the candidate the most critical information "at a glance".
     
-    ## Role Overview
-    (A brief paragraph describing the role)
+    Structure the output in Markdown as follows:
 
-    ## Required Skills & Qualifications
-    (A bulleted list of the required skills and qualifications)
+    ## The Role
+    (1-2 concise sentences describing the core essence of the role)
+
+    ## Key Responsibilities
+    - (3-5 bullet points of the most important day-to-day duties)
+
+    ## Top Must-Haves
+    - (3-5 bullet points of the non-negotiable hard skills or experiences)
+
+    ## Why This Role?
+    (1-2 sentences highlighting the benefits, culture, or unique selling points)
     
+    ## Key Details
+    - **Location**: (Extract or "Not specified")
+    - **Salary**: (Extract or "Not specified")
+    - **Work Type**: (Remote/Hybrid/Onsite/Contract/Full-time)
+
     Job Description:
     {job_description}
     """
     return await get_completion(prompt, model=model)
 
-async def summarize_company(job_description: str, is_testing_mode: bool = False) -> str:
+async def research_company(job_description: str, is_testing_mode: bool = False) -> str:
+    """
+    Research the company and role based on the job description.
+    Returns JSON with structure:
+    {
+        "company_name": "...",
+        "role_title": "...",
+        "company_summary_markdown": "..."
+    }
+    """
     model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
-    Based on the following job description, summarize what the company does. Format the output using Markdown.
-    Output ONLY the markdown content. Do not include any introductory or concluding text.
-    Structure the summary with the following sections if the information is available or can be inferred:
+    Based on the following job description, perform deep research on the company and the role.
     
-    ## Company Mission
-    (A brief overview of the company's mission and what they do)
-
-    ## Industry & Products
-    (Details about the industry they operate in and their key products/services)
-
-    ## Culture & Values
-    (Any information about the company culture or values mentioned)
+    # Task
+    1. Identify the Company Name and Role Title.
+    2. Write a comprehensive markdown summary of the company.
     
-    Job Description:
+    # Output Format
+    Return a valid JSON object with the following fields:
+    - "company_name": The name of the hiring company. If not mentioned, use "Unknown Company".
+    - "role_title": The title of the position.
+    - "company_summary_markdown": A markdown-formatted summary with the following sections:
+        ## Company Mission
+        (A brief overview of the company's mission and what they do)
+
+        ## Industry & Products
+        (Details about the industry they operate in and their key products/services)
+
+        ## Culture & Values
+        (Any information about the company culture or values mentioned)
+
+    # Job Description
     {job_description}
     """
-    return await get_completion(prompt, model=model)
+    return await get_completion(prompt, model=model, response_format={"type": "json_object"})
+
+async def extract_candidate_info(resume_text: str, is_testing_mode: bool = False) -> str:
+    """
+    Extract candidate metadata from the resume.
+    Returns JSON with structure:
+    {
+        "name": "...",
+        "email": "...",
+        "phone": "..."
+    }
+    """
+    model = TESTING_MODEL if is_testing_mode else writing_model
+    prompt = f"""
+    Extract the following metadata from the resume text.
+    
+    # Output Format
+    Return a valid JSON object with the following fields:
+    - "name": The candidate's full name.
+    - "email": The candidate's email address (or null if not found).
+    - "phone": The candidate's phone number (or null if not found).
+    
+    # Resume Text
+    {resume_text}
+    """
+    return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
 async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: bool = False) -> str:
     model = TESTING_MODEL if is_testing_mode else writing_model

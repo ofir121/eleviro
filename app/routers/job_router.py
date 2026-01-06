@@ -59,12 +59,13 @@ async def process_job(
     # Use formatted_resume_text for suggestions so original_text matches what we'll display/download
     results = await asyncio.gather(
         ai_service.summarize_job(final_job_desc, is_testing_mode),
-        ai_service.summarize_company(final_job_desc, is_testing_mode),
+        ai_service.research_company(final_job_desc, is_testing_mode),
+        ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode),
         ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode),
         ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode)
     )
 
-    job_summary, company_summary, resume_suggestions_json, cover_letter = results
+    job_summary, company_research_json, candidate_info_json, resume_suggestions_json, cover_letter = results
     
     # Parse JSON response
     try:
@@ -72,13 +73,44 @@ async def process_job(
         resume_suggestions = suggestions_data.get("suggestions", [])
     except json.JSONDecodeError as e:
         print(f"Error parsing suggestions JSON: {e}")
-        print(f"Raw response: {resume_suggestions_json}")
         # Fallback to empty suggestions if parsing fails
         resume_suggestions = []
+
+    # Parse Company Research
+    try:
+        company_data = json.loads(company_research_json)
+        company_summary = company_data.get("company_summary_markdown", "No summary available.")
+        company_name = company_data.get("company_name", "Company")
+        role_title = company_data.get("role_title", "Role")
+    except json.JSONDecodeError:
+        company_summary = "Error parsing company research."
+        company_name = "Company"
+        role_title = "Role"
+
+    # Parse Candidate Info
+    try:
+        candidate_data = json.loads(candidate_info_json)
+        # Handle potential None values if key exists but is null
+        raw_name = candidate_data.get("name")
+        candidate_name = str(raw_name).strip().title() if raw_name else "Candidate"
+        
+        raw_email = candidate_data.get("email")
+        candidate_email = str(raw_email).strip().lower() if raw_email else ""
+        
+        candidate_phone = candidate_data.get("phone", "")
+    except (json.JSONDecodeError, AttributeError):
+        candidate_name = "Candidate"
+        candidate_email = ""
+        candidate_phone = ""
 
     return {
         "job_summary": job_summary,
         "company_summary": company_summary,
+        "company_name": company_name,
+        "role_title": role_title,
+        "candidate_name": candidate_name,
+        "candidate_email": candidate_email,
+        "candidate_phone": candidate_phone,
         "resume_suggestions": resume_suggestions,
         "original_resume": formatted_resume_text,  # Use formatted version
         "cover_letter": cover_letter

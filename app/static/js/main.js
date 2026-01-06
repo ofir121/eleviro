@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let originalResume = '';
     let currentSuggestionIndex = 0;
     let coverLetterMarkdown = '';
+    let companyName = 'Company';
+    let candidateName = 'Candidate';
 
     // Tab Switching Logic
     document.querySelectorAll('.tab-btn').forEach(button => {
@@ -37,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const content = coverLetterMarkdown;
-            const filename = "Cover_Letter";
+            const filename = `${candidateName} Cover Letter ${companyName}`;
 
             const formData = new FormData();
             formData.append('content', content);
@@ -98,7 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Then download the modified resume
             const formData = new FormData();
             formData.append('content', modified_resume);
-            formData.append('filename', 'Adapted_Resume');
+
+            const filename = `${candidateName} CV ${companyName}`;
+            formData.append('filename', filename);
 
             const downloadResponse = await fetch('/api/download', {
                 method: 'POST',
@@ -111,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const url = window.URL.createObjectURL(docxBlob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'Adapted_Resume.docx';
+                a.download = `${filename}.docx`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -406,6 +410,8 @@ document.addEventListener('DOMContentLoaded', () => {
             allSuggestions = data.resume_suggestions || [];
             originalResume = data.original_resume || '';
             coverLetterMarkdown = data.cover_letter || '';
+            companyName = data.company_name || 'Company';
+            candidateName = data.candidate_name || 'Candidate';
 
             // Populate results with Markdown rendering (with null checks)
             document.getElementById('job-summary-content').innerHTML = data.job_summary ? marked.parse(data.job_summary) : '<p>No job summary available</p>';
