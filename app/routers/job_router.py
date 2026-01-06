@@ -191,3 +191,25 @@ async def apply_changes(request: ApplyChangesRequest):
         "total_accepted": len(request.accepted_suggestion_ids)
     }
 
+
+
+
+class OutreachRequest(BaseModel):
+    resume_text: str
+    job_description: str
+    outreach_type: str
+    is_testing_mode: bool = True
+    company_name: str = "the company"
+    role_title: str = "the role"
+
+@router.post("/generate-outreach")
+async def generate_outreach_endpoint(request: OutreachRequest):
+    content = await ai_service.generate_outreach(
+        request.resume_text, 
+        request.job_description, 
+        request.outreach_type, 
+        request.is_testing_mode,
+        request.company_name,
+        request.role_title
+    )
+    return {"content": content}

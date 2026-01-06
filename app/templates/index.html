@@ -87,6 +87,7 @@
                 </form>
             </section>
 
+            <!-- Application Results -->
             <section id="results-section" class="results-section hidden">
                 <div class="result-card">
                     <h2>Job Summary</h2>
@@ -133,6 +134,28 @@
                         <button class="download-btn" data-type="cover-letter">Download Word</button>
                     </div>
                     <div id="cover-letter-content" class="content-box"></div>
+                </div>
+
+                <!-- Cold Outreach Generator -->
+                <div class="result-card">
+                    <h2>Cold Outreach Generator</h2>
+                    <p class="section-desc">Generate tailored messages to connect with hiring managers.</p>
+
+                    <div class="outreach-controls">
+                        <div class="form-group">
+                            <label>Message Type</label>
+                            <select id="outreach-type" class="dropdown">
+                                <option value="linkedin_connection">LinkedIn Connection Request</option>
+                                <option value="hiring_manager_email">Hiring Manager Email</option>
+                                <option value="follow_up_email">Follow-up Email</option>
+                            </select>
+                        </div>
+                        <button id="generate-outreach-btn" class="action-btn width-full">Generate Message</button>
+                    </div>
+                    <div id="outreach-result" class="content-box hidden">
+                        <textarea id="outreach-content" readonly class="outreach-textarea"></textarea>
+                        <button id="copy-outreach-btn" class="secondary-btn">Copy to Clipboard</button>
+                    </div>
                 </div>
             </section>
         </main>

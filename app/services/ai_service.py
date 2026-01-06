@@ -373,3 +373,59 @@ async def suggest_resume_changes(resume_text: str, job_description: str, is_test
     """
     return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
+    return await get_completion(prompt, model=model, response_format={"type": "json_object"})
+
+
+async def generate_outreach(resume_text: str, job_description: str, outreach_type: str, is_testing_mode: bool = False, company_name: str = "the company", role_title: str = "the role") -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
+    
+    type_prompts = {
+        "linkedin_connection": f"""
+            Write a short, engaging LinkedIn connection request message as a candidate (max 300 characters).
+            - Mention the role "{role_title}" at "{company_name}".
+            - Be polite and professional.
+            - Do not be overly salesy.
+        """,
+        "hiring_manager_email": f"""
+            Write a professional email to the Hiring Manager or Recruiter at {company_name}.
+            - Subject Line: [Clear and catchy subject mentioning {role_title}]
+            - Body: Pitch the candidate's core value proposition based on the resume and job description.
+            - Keep it concise (under 200 words).
+            - Call to Action: Request a brief chat.
+        """,
+        "follow_up_email": f"""
+            Write a polite follow-up email to be sent 1 week after applying.
+            - Reiterate interest in the {role_title} role at {company_name}.
+            - Mention a specific reason why the candidate is a great fit (referencing a key skill).
+            - Keep it very short.
+        """
+    }
+
+
+    selected_prompt = type_prompts.get(outreach_type)
+    if not selected_prompt:
+        return "Error: Invalid outreach type selected."
+
+    prompt = f"""
+    # Role
+    You are an expert Career Coach and Networking Strategist.
+
+    # Task
+    {selected_prompt}
+
+    # Constraints
+    - Output ONLY the message content.
+    - No headers or markdown unless necessary for the email format (e.g. Subject:).
+    - Use company culture and industry standards to align the message tone.
+    - IMPORTANT: Use the actual company name "{company_name}" and role "{role_title}" directly. Do NOT use placeholders like [Company Name].
+    
+    # Context
+    <resume_summary>
+    {resume_text[:2000]}... (truncated for brevity)
+    </resume_summary>
+    
+    <job_description>
+    {job_description}
+    </job_description>
+    """
+    return await get_completion(prompt, model=model)
