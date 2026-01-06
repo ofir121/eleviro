@@ -459,6 +459,12 @@ document.addEventListener('DOMContentLoaded', () => {
         originalResume = '';
         coverLetterMarkdown = '';
 
+        // Clear previous outreach results
+        const outreachResult = document.getElementById('outreach-result');
+        const outreachContent = document.getElementById('outreach-content');
+        if (outreachResult) outreachResult.classList.add('hidden');
+        if (outreachContent) outreachContent.value = '';
+
         // Show loading state
         submitBtn.disabled = true;
         btnText.textContent = 'Generating...';

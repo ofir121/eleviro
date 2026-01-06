@@ -381,10 +381,13 @@ async def generate_outreach(resume_text: str, job_description: str, outreach_typ
     
     type_prompts = {
         "linkedin_connection": f"""
-            Write a short, engaging LinkedIn connection request message as a candidate (max 300 characters).
-            - Mention the role "{role_title}" at "{company_name}".
-            - Be polite and professional.
-            - Do not be overly salesy.
+            Write a short, engaging LinkedIn connection request message (max 300 characters).
+            - The sender is a job candidate who has applied or wants to apply for the "{role_title}" role at "{company_name}".
+            - The recipient is a recruiter, hiring manager, or employee at "{company_name}".
+            - Express genuine interest in the role and the company.
+            - Briefly mention why the candidate's background is a good fit for the role (not the recipient's expertise).
+            - Be polite, professional, and not salesy.
+            - Do NOT include "[Name]" placeholder - just start with "Hi," or similar.
         """,
         "hiring_manager_email": f"""
             Write a professional email to the Hiring Manager or Recruiter at {company_name}.
