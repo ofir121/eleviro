@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let coverLetterMarkdown = '';
     let companyName = 'Company';
     let candidateName = 'Candidate';
+    let progressInterval;
+    let cleanupTimeout;
 
     // Tab Switching Logic
     document.querySelectorAll('.tab-btn').forEach(button => {
@@ -344,13 +346,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const progressBarFill = document.getElementById('progress-bar-fill');
         const progressText = document.getElementById('progress-text');
 
+        // Clear previous state
+        if (progressInterval) clearInterval(progressInterval);
+        if (cleanupTimeout) clearTimeout(cleanupTimeout);
+
         progressContainer.classList.remove('hidden');
+
+        // Reset instantly without animation
+        progressBarFill.style.transition = 'none';
         progressBarFill.style.width = '0%';
+        progressBarFill.offsetHeight; // Force reflow
+        progressBarFill.style.transition = ''; // Restore CSS transition
+
         progressText.textContent = 'Initializing...';
 
         // Simulated Progress Logic
         let progress = 0;
-        const interval = setInterval(() => {
+        progressInterval = setInterval(() => {
             if (progress < 20) {
                 progress += 2; // Fast start
                 progressText.textContent = 'Parsing documents...';
@@ -397,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Complete progress bar
-            clearInterval(interval);
+            clearInterval(progressInterval);
             progressBarFill.style.width = '100%';
             progressText.textContent = 'Complete!';
 
@@ -447,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loader.classList.add('hidden');
 
             // Hide progress bar after a delay
-            setTimeout(() => {
+            cleanupTimeout = setTimeout(() => {
                 progressContainer.classList.add('hidden');
                 progressBarFill.style.width = '0%';
                 // Reset color if error
