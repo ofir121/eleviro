@@ -328,6 +328,34 @@ document.addEventListener('DOMContentLoaded', () => {
         loader.classList.remove('hidden');
         resultsSection.classList.add('hidden');
 
+        // Progress Bar Initialization
+        const progressContainer = document.getElementById('progress-container');
+        const progressBarFill = document.getElementById('progress-bar-fill');
+        const progressText = document.getElementById('progress-text');
+
+        progressContainer.classList.remove('hidden');
+        progressBarFill.style.width = '0%';
+        progressText.textContent = 'Initializing...';
+
+        // Simulated Progress Logic
+        let progress = 0;
+        const interval = setInterval(() => {
+            if (progress < 20) {
+                progress += 2; // Fast start
+                progressText.textContent = 'Parsing documents...';
+            } else if (progress < 50) {
+                progress += 1; // Steady climb
+                progressText.textContent = 'Analyzing job description and resume...';
+            } else if (progress < 80) {
+                progress += 0.5; // Slow down
+                progressText.textContent = 'Generating tailored suggestions...';
+            } else if (progress < 95) {
+                progress += 0.1; // Crawl to finish
+                progressText.textContent = 'Finalizing formatting...';
+            }
+            progressBarFill.style.width = `${progress}%`;
+        }, 500);
+
         const formData = new FormData(form);
 
         // Remove file inputs if text tabs are active
@@ -356,6 +384,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const errorData = await response.json();
                 throw new Error(errorData.detail || 'Network response was not ok');
             }
+
+            // Complete progress bar
+            clearInterval(interval);
+            progressBarFill.style.width = '100%';
+            progressText.textContent = 'Complete!';
+
+            // Short delay to show 100%
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             const data = await response.json();
 
@@ -388,11 +424,21 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error:', error);
             console.error('Full error details:', error.message);
             alert(`Error: ${error.message || 'An error occurred. Please check your inputs and try again.'}`);
+            progressText.textContent = 'Error occurred';
+            progressBarFill.style.backgroundColor = '#ef4444';
         } finally {
             // Reset button state
             submitBtn.disabled = false;
             btnText.textContent = 'Generate Application Pack';
             loader.classList.add('hidden');
+
+            // Hide progress bar after a delay
+            setTimeout(() => {
+                progressContainer.classList.add('hidden');
+                progressBarFill.style.width = '0%';
+                // Reset color if error
+                progressBarFill.style.backgroundColor = '';
+            }, 2000);
         }
     });
 
