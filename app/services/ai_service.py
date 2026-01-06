@@ -51,7 +51,7 @@ async def summarize_job(job_description: str, is_testing_mode: bool = False) -> 
     
     ## Key Details
     - **Location**: (Extract or "Not specified")
-    - **Salary**: (Extract or "Not specified")
+    - **Salary**: (Extract if explicitly stated. IF NOT STATED: Estimate a realistic range based on the role title, location, and industry standards, and clearly label it as "$X - $Y (Estimated)". Do not leave this as "Not specified" unless it is impossible to estimate.)
     - **Work Type**: (Remote/Hybrid/Onsite/Contract/Full-time)
 
     Job Description:
