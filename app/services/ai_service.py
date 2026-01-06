@@ -227,11 +227,17 @@ async def generate_cover_letter(resume_text: str, job_description: str, is_testi
 
     # Constraints
     - Output ONLY the markdown content.
-    - No introductory or concluding text.
+    - No introductory or concluding text (other than the letter itself).
     - Compact: 3-4 paragraphs max.
     - Format as a standard business letter.
 
     # Guidelines
+    - Start with a header containing the candidate's name and contact details.
+    - Format the Name as `# [Candidate Name]` (Centered by logic).
+    - Format the contact details on the next line, separated by · (middle dot).
+    - Example Header:
+      # John Doe
+      New York, NY · 555-555-5555 · email@example.com
     - Express enthusiasm for the role.
     - Highlight key achievements from the resume that match the job requirements.
     - Explain why the candidate is a good fit.

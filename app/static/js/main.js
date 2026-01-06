@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let acceptedSuggestionIds = new Set();
     let originalResume = '';
     let currentSuggestionIndex = 0;
+    let coverLetterMarkdown = '';
 
     // Tab Switching Logic
     document.querySelectorAll('.tab-btn').forEach(button => {
@@ -27,10 +28,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Download Cover Letter Logic (unchanged)
+    // Download Cover Letter Logic
     document.querySelectorAll('.download-btn[data-type="cover-letter"]').forEach(btn => {
         btn.addEventListener('click', async () => {
-            const content = document.getElementById('cover-letter-content').textContent;
+            if (!coverLetterMarkdown) {
+                alert('No cover letter content available to download.');
+                return;
+            }
+
+            const content = coverLetterMarkdown;
             const filename = "Cover_Letter";
 
             const formData = new FormData();
@@ -321,6 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         acceptedSuggestionIds.clear();
         allSuggestions = [];
         originalResume = '';
+        coverLetterMarkdown = '';
 
         // Show loading state
         submitBtn.disabled = true;
@@ -398,6 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Store data
             allSuggestions = data.resume_suggestions || [];
             originalResume = data.original_resume || '';
+            coverLetterMarkdown = data.cover_letter || '';
 
             // Populate results with Markdown rendering (with null checks)
             document.getElementById('job-summary-content').innerHTML = data.job_summary ? marked.parse(data.job_summary) : '<p>No job summary available</p>';
