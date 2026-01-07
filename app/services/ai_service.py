@@ -1,12 +1,17 @@
 import os
 import re
 from openai import AsyncOpenAI
+from langfuse.openai import openai as langfuse_openai
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Initialize Langfuse - it reads LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, 
+# and LANGFUSE_BASE_URL from environment variables automatically
 api_key = os.getenv("OPENAI_API_KEY")
-client = AsyncOpenAI(api_key=api_key) if api_key else None
+
+# Use Langfuse-wrapped AsyncOpenAI client for automatic tracing
+client = langfuse_openai.AsyncOpenAI(api_key=api_key) if api_key else None
 reasoning_model = "gpt-5-mini"
 writing_model = "gpt-3.5-turbo" #"gpt-4.1-mini"
 TESTING_MODEL = "gpt-3.5-turbo"
