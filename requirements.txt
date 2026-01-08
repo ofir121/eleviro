@@ -9,5 +9,5 @@ pypdf
 python-docx
 beautifulsoup4
 requests
-duckduckgo-search
+ddgs
 aiohttp
