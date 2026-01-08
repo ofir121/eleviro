@@ -407,6 +407,26 @@ button:active {
     border-radius: 0.25rem;
 }
 
+.suggestion-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 0.75rem;
+    background-color: rgba(16, 185, 129, 0.05);
+    /* Very subtle green tint to indicate it's the 'new' text */
+    border: 1px solid #10b981;
+    border-radius: 0.5rem;
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: 1rem;
+    resize: vertical;
+    transition: all 0.2s;
+}
+
+.suggestion-textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
 .reason {
     color: var(--text-secondary);
     font-size: 0.9rem;

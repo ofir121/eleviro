@@ -304,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="arrow">↓</div>
                     <div class="suggested-text">
-                        <ins>${escapeHtml(suggestion.suggested_text)}</ins>
+                        <textarea class="suggestion-textarea" data-id="${suggestion.id}">${suggestion.suggested_text}</textarea>
                     </div>
                 </div>
                 
@@ -323,6 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = container.querySelector('.suggestion-card');
         const acceptBtn = card.querySelector('.accept-btn');
         const rejectBtn = card.querySelector('.reject-btn');
+        const textarea = card.querySelector('.suggestion-textarea');
 
         if (acceptedSuggestionIds.has(suggestion.id)) {
             card.classList.add('accepted');
@@ -335,6 +336,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add event listeners
         acceptBtn.addEventListener('click', () => toggleSuggestion(parseInt(acceptBtn.dataset.id), 'accept'));
         rejectBtn.addEventListener('click', () => toggleSuggestion(parseInt(rejectBtn.dataset.id), 'reject'));
+
+        // Update model on text change
+        textarea.addEventListener('input', (e) => {
+            const newText = e.target.value;
+            // distinct update to local state
+            suggestion.suggested_text = newText;
+
+            // If it was already accepted, we should trigger a preview update
+            if (acceptedSuggestionIds.has(suggestion.id)) {
+                // Debounce preview update slightly to avoid too many requests
+                if (window.previewUpdateTimeout) clearTimeout(window.previewUpdateTimeout);
+                window.previewUpdateTimeout = setTimeout(() => {
+                    updatePreview();
+                }, 800);
+            }
+        });
 
         // Update counter
         updateCounter();
