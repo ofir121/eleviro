@@ -609,14 +609,15 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
     # 2. External Search: DuckDuckGo
     if company_name and company_name != "Unknown Company":
         try:
-            query = f'site:linkedin.com/in/ "{company_name}" ("recruiter" OR "talent acquisition" OR "hiring manager")'
+            # Include "current" to prioritize active employees and filter out former employees
+            query = f'site:linkedin.com/in/ "{company_name}" ("recruiter" OR "talent acquisition" OR "hiring manager") -"former" -"ex-" -"previously"'
             
             results = []
             try:
                 loop = asyncio.get_running_loop()
                 with DDGS() as ddgs:
                     results = await loop.run_in_executor(
-                        None, lambda: ddgs.text(query, max_results=limit)
+                        None, lambda: ddgs.text(query, max_results=limit * 2)  # Fetch more to account for filtering
                     )
             except Exception as e:
                 print(f"Error searching for recruiters: {e}")
@@ -628,15 +629,24 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
                 
                 external_prompt = f"""
                 # Task
-                Extract a list of recruiters from the search results below.
+                Extract a list of CURRENTLY ACTIVE recruiters at {company_name} from the search results below.
                 Return valid JSON only.
+                
+                # CRITICAL CONSTRAINTS
+                - ONLY include recruiters who are CURRENTLY working at {company_name}.
+                - EXCLUDE anyone who:
+                  - Has "Former", "Ex-", "Previously", "Past" in their title or description
+                  - Lists {company_name} as a past employer
+                  - Currently works at a DIFFERENT company
+                - Look for indicators of current employment: "at {company_name}", "@ {company_name}", current job title without end date
+                - If uncertain whether someone is currently employed, DO NOT include them.
                 
                 # Output Format
                 {{
                     "recruiters": [
                         {{
                             "name": "Jane Doe",
-                            "title": "Technical Recruiter",
+                            "title": "Technical Recruiter at {company_name}",
                             "url": "https://www.linkedin.com/in/janedoe"
                         }}
                     ]
