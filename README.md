@@ -12,6 +12,10 @@
     *   **Calibri** font for a modern, professional look.
     *   **Centered Header** for your name and contact details.
     *   Optimized formatting for readability.
+*   **Recruiter & Hiring Manager Discovery**: Automatically identifies key decision-makers and their contact details (LinkedIn profiles) to facilitate direct networking.
+*   **Cold Outreach Generator**: Creates personalized cold outreach messages tailored to specific recruiters or hiring managers.
+*   **Smart Formatting**: Optional "Bold Keywords" feature to highlight relevant skills and impact in your resume.
+*   **Editable AI Suggestions**: Review and refine AI-generated content for your resume and cover letter before finalizing.
 *   **Testing Mode**: Includes a built-in testing mode for faster, cost-effective experimentation.
 
 ## 🛠️ Tech Stack
@@ -19,6 +23,8 @@
 *   **Frontend**: HTML, CSS, JavaScript (Vanilla)
 *   **Backend**: Python, FastAPI
 *   **AI Engine**: OpenAI API
+*   **Observability**: Langfuse
+*   **Search**: DuckDuckGo Search
 *   **Document Processing**: `python-docx`, `pypdf`, `BeautifulSoup4`
 
 ## 🏁 Getting Started
@@ -42,9 +48,12 @@
     ```
 
 3.  **Configure Environment**:
-    Create a `.env` file in the root directory and add your OpenAI API key:
+    Create a `.env` file in the root directory and add your OpenAI API key and Langfuse credentials:
     ```env
     OPENAI_API_KEY=your_api_key_here
+    LANGFUSE_PUBLIC_KEY=your_public_key
+    LANGFUSE_SECRET_KEY=your_secret_key
+    LANGFUSE_HOST=your_langfuse_host
     ```
 
 ### Running the Application
