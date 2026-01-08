@@ -626,14 +626,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         `}).join('');
                     } else {
-                        recruitersContainer.innerHTML = '<p class="text-secondary">No recruiter profiles found for this company.</p>';
+                        recruitersContainer.innerHTML = '<p class="text-secondary">No recruiter or hiring manager profiles found for this company.</p>';
                     }
                 } catch (e) {
                     console.error("Error parsing recruiters:", e);
-                    recruitersContainer.innerHTML = '<p class="text-secondary">Unable to load recruiters.</p>';
+                    recruitersContainer.innerHTML = '<p class="text-secondary">Unable to load contacts.</p>';
                 }
             } else {
-                recruitersContainer.innerHTML = '<p class="text-secondary">No recruiter profiles found.</p>';
+                recruitersContainer.innerHTML = '<p class="text-secondary">No recruiter or hiring manager profiles found.</p>';
             }
 
             // Initialize preview with the formatted original resume

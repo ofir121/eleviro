@@ -3,6 +3,7 @@ import re
 from openai import AsyncOpenAI
 from langfuse.openai import openai as langfuse_openai
 import asyncio
+import aiohttp
 from ddgs import DDGS
 from dotenv import load_dotenv
 
@@ -573,25 +574,33 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
             model = TESTING_MODEL if is_testing_mode else writing_model
             internal_prompt = f"""
             # Task
-            Extract specific recruiters, hiring managers, or talent acquisition contacts EXPLICITLY mentioned in the job description text below.
+            Extract the JOB POSTER, recruiters, hiring managers, or talent acquisition contacts from the job description text below.
+            
+            # What to Look For (Priority Order)
+            1. **Job Poster** - LinkedIn job posts often show "Job poster" followed by a name (e.g., "Ajay K.", "Sarah M."), their title, and sometimes "Hiring Manager" or "Recruiter" indicator
+            2. **Posted by** - Any "Posted by [Name]" pattern
+            3. **Contact Person** - Names with titles like "Recruiter", "Talent Acquisition", "Hiring Manager", "HR"
+            4. **Names with Company Context** - Names followed by "at [Company]" or "@ [Company]"
             
             # Constraints
             - Return ONLY a valid JSON object.
             - If no one is mentioned, return an empty array for "recruiters".
             - Do not Hallucinate or guess. Only extract names if they are present.
+            - INCLUDE partial names like "Ajay K." or "Sarah M." - these are valid.
+            - For partial names, keep them as-is (don't try to guess full names).
             
             # Output Format
             {{
                 "recruiters": [
                     {{
-                        "name": "Jane Doe",
-                        "title": "Recruiter",
-                        "url": "https://www.linkedin.com/in/janedoe (or null if no URL is mentioned)"
+                        "name": "Ajay K.",
+                        "title": "Technical Recruiter at ASCII GROUP",
+                        "url": null
                     }}
                 ]
             }}
             
-            # Job Description
+            # Job Description / Page Content
             {job_description[:10000]}
             """
             
@@ -605,6 +614,36 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
                     recruiters.append(r)
         except Exception as e:
             print(f"Error extracting internal recruiters: {e}")
+
+    # 1.5 Search for LinkedIn profiles of internally found recruiters
+    # This helps find URLs for job posters like "Ajay K." extracted from the job description
+    if recruiters and company_name:
+        for recruiter in recruiters:
+            if not recruiter.get("url") or recruiter.get("url") == "null":
+                try:
+                    # Search for this specific person on LinkedIn
+                    name = recruiter.get("name", "")
+                    title = recruiter.get("title", "")
+                    search_query = f'site:linkedin.com/in/ "{name}" "{company_name}"'
+                    if "recruiter" in title.lower() or "talent" in title.lower() or "hiring" in title.lower():
+                        search_query += ' (recruiter OR "talent acquisition" OR "hiring")'
+                    
+                    loop = asyncio.get_running_loop()
+                    with DDGS() as ddgs:
+                        results = await loop.run_in_executor(
+                            None, lambda q=search_query: ddgs.text(q, max_results=3)
+                        )
+                    
+                    if results:
+                        # Look for the best matching result
+                        for result in results:
+                            url = result.get('href', '')
+                            if 'linkedin.com/in/' in url:
+                                recruiter['url'] = url
+                                print(f"Found LinkedIn URL for {name}: {url}")
+                                break
+                except Exception as e:
+                    print(f"Error searching for recruiter {recruiter.get('name')}: {e}")
 
     # 2. External Search: DuckDuckGo
     if company_name and company_name != "Unknown Company":
@@ -629,11 +668,17 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
                 
                 external_prompt = f"""
                 # Task
-                Extract a list of CURRENTLY ACTIVE recruiters at {company_name} from the search results below.
+                Extract a list of CURRENTLY ACTIVE recruiters AND hiring managers at {company_name} from the search results below.
                 Return valid JSON only.
                 
+                # WHO TO INCLUDE
+                - Recruiters (Technical Recruiter, Talent Acquisition, etc.)
+                - Hiring Managers (Engineering Manager, Team Lead, Director, VP, etc.)
+                - HR professionals
+                - Anyone involved in the hiring process
+                
                 # CRITICAL CONSTRAINTS
-                - ONLY include recruiters who are CURRENTLY working at {company_name}.
+                - ONLY include people who are CURRENTLY working at {company_name}.
                 - EXCLUDE anyone who:
                   - Has "Former", "Ex-", "Previously", "Past" in their title or description
                   - Lists {company_name} as a past employer
@@ -648,6 +693,11 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
                             "name": "Jane Doe",
                             "title": "Technical Recruiter at {company_name}",
                             "url": "https://www.linkedin.com/in/janedoe"
+                        }},
+                        {{
+                            "name": "John Smith",
+                            "title": "Engineering Manager at {company_name}",
+                            "url": "https://www.linkedin.com/in/johnsmith"
                         }}
                     ]
                 }}
@@ -666,5 +716,27 @@ async def find_recruiters(company_name: str, job_description: str = "", limit: i
         except Exception as e:
             print(f"Error in external recruiter search: {e}")
 
-    # Return final list as JSON string
-    return json.dumps(recruiters)
+    # Validate LinkedIn URLs before returning
+    async def validate_linkedin_url(url: str) -> bool:
+        """Check if a LinkedIn URL is valid (format only)."""
+        if not url or not isinstance(url, str):
+            return False
+        
+        # Relaxed validation: Allow regional domains (e.g., in.linkedin.com)
+        # and skip HTTP check because LinkedIn blocks automated requests.
+        return 'linkedin.com/in/' in url
+    
+    # Validate all recruiter URLs concurrently
+    validated_recruiters = []
+    if recruiters:
+        validation_tasks = [validate_linkedin_url(r.get('url')) for r in recruiters]
+        validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+        
+        for recruiter, is_valid in zip(recruiters, validation_results):
+            if is_valid is True:  # Only include if explicitly valid (not exception)
+                validated_recruiters.append(recruiter)
+            else:
+                print(f"Filtered out invalid recruiter URL: {recruiter.get('url')}")
+    
+    # Return validated list as JSON string
+    return json.dumps(validated_recruiters)
