@@ -820,3 +820,34 @@ header h1 {
     padding: 0.5rem;
     margin-top: 0.5rem;
 }
+
+/* Documentation Button */
+.doc-btn {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.doc-btn:hover {
+    background-color: var(--bg-secondary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 600px) {
+    .doc-btn {
+        position: static;
+        display: inline-block;
+        margin-top: 1rem;
+    }
+}

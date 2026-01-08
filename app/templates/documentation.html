@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - Eleviro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=1.1">
+    <link rel="stylesheet" href="/static/css/markdown.css?v=1.0">
+    <link rel="icon" type="image/png" href="/static/images/logo.png">
+    <style>
+        .documentation-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background-color: var(--card-bg);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .doc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        .back-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(37, 99, 235, 0.1);
+            padding: 8px 16px;
+            border-radius: var(--radius-md);
+            transition: all 0.2s;
+        }
+
+        .back-link:hover {
+            background: rgba(37, 99, 235, 0.2);
+            color: var(--primary-hover);
+        }
+
+        .doc-content h2 {
+            color: var(--text-primary);
+            margin-top: 30px;
+            margin-bottom: 16px;
+            font-size: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .doc-content h3 {
+            color: var(--text-primary);
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-size: 1.25rem;
+        }
+
+        .doc-content p {
+            margin-bottom: 16px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .doc-content ul {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        .doc-content li {
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .doc-content code {
+            background-color: var(--bg-secondary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        .doc-content pre {
+            background-color: var(--bg-secondary);
+            padding: 16px;
+            border-radius: var(--radius-md);
+            overflow-x: auto;
+            margin-bottom: 20px;
+        }
+
+        .doc-content pre code {
+            background-color: transparent;
+            padding: 0;
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="documentation-container">
+        <header class="doc-header">
+            <div class="logo-container">
+                <img src="/static/images/logo.png" alt="Eleviro Logo" class="logo">
+                <h1>Documentation</h1>
+            </div>
+            <a href="/" class="back-link">← Back to App</a>
+        </header>
+
+        <main class="doc-content">
+            <p><strong>Eleviro</strong> is an AI-powered job application assistant designed to streamline the process of
+                refining your resume and creating tailored cover letters. By analyzing both your resume and the specific
+                job description, Eleviro helps you put your best foot forward.</p>
+
+            <h2>🚀 Key Features</h2>
+            <ul>
+                <li><strong>Intelligent Job Analysis</strong>: Scrapes job descriptions directly from URLs or accepts
+                    raw text to identify key skills and requirements.</li>
+                <li><strong>Resume Parsing</strong>: Supports uploading existing resumes in both <strong>PDF</strong>
+                    and <strong>DOCX</strong> formats.</li>
+                <li><strong>AI-Powered Tailoring</strong>: Uses advanced AI models (via OpenAI) to suggest specific
+                    optimizations for your Professional Summary and Experience bullet points, ensuring they align with
+                    the job description.</li>
+                <li><strong>Automated Cover Letters</strong>: Generates personalized, professional cover letters based
+                    on your experience and the job's context.</li>
+                <li><strong>Professional Export</strong>: Downloads your adapted resume as a cleanly formatted DOCX
+                    file, featuring:
+                    <ul>
+                        <li><strong>Calibri</strong> font for a modern, professional look.</li>
+                        <li><strong>Centered Header</strong> for your name and contact details.</li>
+                        <li>Optimized formatting for readability.</li>
+                    </ul>
+                </li>
+                <li><strong>Recruiter & Hiring Manager Discovery</strong>: Automatically identifies key decision-makers
+                    and their contact details (LinkedIn profiles) to facilitate direct networking.</li>
+                <li><strong>Cold Outreach Generator</strong>: Creates personalized cold outreach messages tailored to
+                    specific recruiters or hiring managers.</li>
+                <li><strong>Smart Formatting</strong>: Optional "Bold Keywords" feature to highlight relevant skills and
+                    impact in your resume.</li>
+                <li><strong>Editable AI Suggestions</strong>: Review and refine AI-generated content for your resume and
+                    cover letter before finalizing.</li>
+                <li><strong>Testing Mode</strong>: Includes a built-in testing mode for faster, cost-effective
+                    experimentation.</li>
+            </ul>
+
+            <h2>🏁 Getting Started</h2>
+
+            <h3>1. Input Job Description</h3>
+            <p>You can either provide a direct URL to a job posting (e.g., LinkedIn, Indeed) or paste the raw text of
+                the job description.</p>
+
+            <h3>2. Provide Your Resume</h3>
+            <p>Upload your current resume in PDF format. This serves as the base for all adaptations.</p>
+
+            <h3>3. Configure Options</h3>
+            <p>Use the checkboxes to enable/disable specific features:</p>
+            <ul>
+                <li><strong>Testing Mode</strong>: Uses a faster, cheaper model for quick tests.</li>
+                <li><strong>Bold Keywords</strong>: Automatically bolds key skills in the output.</li>
+            </ul>
+
+            <h3>4. Generate</h3>
+            <p>Click "Generate Application Pack" and let the AI analyze and generate your documents. Requires an OpenAI
+                API key.</p>
+
+
+        </main>
+    </div>
+</body>
+
+</html>

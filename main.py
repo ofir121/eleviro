@@ -28,6 +28,10 @@ async def health_check():
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/documentation", response_class=HTMLResponse)
+async def read_docs(request: Request):
+    return templates.TemplateResponse("documentation.html", {"request": request})
+
 # Import and include routers
 from app.routers import job_router
 app.include_router(job_router.router)
