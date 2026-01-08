@@ -2,6 +2,8 @@ import os
 import re
 from openai import AsyncOpenAI
 from langfuse.openai import openai as langfuse_openai
+import asyncio
+from ddgs import DDGS
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -555,3 +557,104 @@ async def suggest_bold_changes(resume_text: str, job_description: str, job_type:
         print(f"Debug: No bolding suggestions found. Stats: OrigLines={len(original_lines)}, BoldLines={len(bolded_lines)}")
 
     return suggestions
+
+
+async def find_recruiters(company_name: str, job_description: str = "", limit: int = 5, is_testing_mode: bool = False) -> str:
+    """
+    Find recruiters using DuckDuckGo Search (external) and Job Description (internal).
+    Returns a JSON string list of recruiter objects.
+    """
+    import json
+    recruiters = []
+    
+    # 1. Internal Search: Extract from Job Description
+    if job_description:
+        try:
+            model = TESTING_MODEL if is_testing_mode else writing_model
+            internal_prompt = f"""
+            # Task
+            Extract specific recruiters, hiring managers, or talent acquisition contacts EXPLICITLY mentioned in the job description text below.
+            
+            # Constraints
+            - Return ONLY a valid JSON object.
+            - If no one is mentioned, return an empty array for "recruiters".
+            - Do not Hallucinate or guess. Only extract names if they are present.
+            
+            # Output Format
+            {{
+                "recruiters": [
+                    {{
+                        "name": "Jane Doe",
+                        "title": "Recruiter",
+                        "url": "https://www.linkedin.com/in/janedoe (or null if no URL is mentioned)"
+                    }}
+                ]
+            }}
+            
+            # Job Description
+            {job_description[:10000]}
+            """
+            
+            internal_res = await get_completion(internal_prompt, model=model, response_format={"type": "json_object"})
+            # Cleanup potential markdown backticks just in case
+            internal_res = internal_res.replace("```json", "").replace("```", "").strip()
+            internal_data = json.loads(internal_res)
+            
+            for r in internal_data.get("recruiters", []):
+                if r.get("name") and r.get("name") not in ["Unknown", "Hiring Manager"]:
+                    recruiters.append(r)
+        except Exception as e:
+            print(f"Error extracting internal recruiters: {e}")
+
+    # 2. External Search: DuckDuckGo
+    if company_name and company_name != "Unknown Company":
+        try:
+            query = f'site:linkedin.com/in/ "{company_name}" ("recruiter" OR "talent acquisition" OR "hiring manager")'
+            
+            results = []
+            try:
+                loop = asyncio.get_running_loop()
+                with DDGS() as ddgs:
+                    results = await loop.run_in_executor(
+                        None, lambda: ddgs.text(query, max_results=limit)
+                    )
+            except Exception as e:
+                print(f"Error searching for recruiters: {e}")
+                results = []
+
+            if results:
+                model = TESTING_MODEL if is_testing_mode else writing_model
+                snippets_text = "\n\n".join([f"Result {i+1}:\nTitle: {r.get('title', '')}\nURL: {r.get('href', '')}\nSnippet: {r.get('body', '')}" for i, r in enumerate(results)])
+                
+                external_prompt = f"""
+                # Task
+                Extract a list of recruiters from the search results below.
+                Return valid JSON only.
+                
+                # Output Format
+                {{
+                    "recruiters": [
+                        {{
+                            "name": "Jane Doe",
+                            "title": "Technical Recruiter",
+                            "url": "https://www.linkedin.com/in/janedoe"
+                        }}
+                    ]
+                }}
+                
+                # Search Results
+                {snippets_text}
+                """
+                
+                external_res = await get_completion(external_prompt, model=model, response_format={"type": "json_object"})
+                external_data = json.loads(external_res)
+                for r in external_data.get("recruiters", []):
+                    # Simple deduplication by name
+                    if not any(ex['name'].lower() == r['name'].lower() for ex in recruiters):
+                         recruiters.append(r)
+                         
+        except Exception as e:
+            print(f"Error in external recruiter search: {e}")
+
+    # Return final list as JSON string
+    return json.dumps(recruiters)

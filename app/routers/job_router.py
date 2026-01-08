@@ -60,20 +60,31 @@ async def process_job(
     # We launch independent tasks first
     task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
     task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
-    task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
     task_suggestions = asyncio.create_task(ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode))
     task_cover = asyncio.create_task(ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode))
+    task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
 
-    # We need the research result to get the job_type for bolding
+    # We need the research result to get the job_type for bolding AND company name for recruiters
     # Await research task first
     try:
         company_research_json = await task_research
         company_data = json.loads(company_research_json)
         job_type = company_data.get("job_type", "General Role")
+        company_name_extracted = company_data.get("company_name", "")
     except Exception as e:
-        print(f"Error getting job type: {e}")
+        print(f"Error getting job type/company name: {e}")
         company_research_json = "{}" # Fallback
         job_type = "General Role"
+        company_name_extracted = ""
+
+    # Launch recruiter search if we have a company name
+    if company_name_extracted and company_name_extracted != "Unknown Company":
+        task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
+    else:
+        # Assuming we still want to try internal search even if company name is unknown?
+        # Actually yes, if the JD has a contact person, we want it.
+        task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
+
 
     # Now launch bolding task with the specific job_type
     if bold_keywords:
@@ -87,6 +98,7 @@ async def process_job(
     resume_suggestions_json = await task_suggestions
     cover_letter = await task_cover
     bolding_suggestions_raw = await task_bolding
+    recruiters_raw = await task_recruiters
     
     # Parse JSON response
     try:
@@ -146,7 +158,8 @@ async def process_job(
         "resume_suggestions": resume_suggestions,
         "original_resume": formatted_resume_text,  # Use formatted version
         "cover_letter": cover_letter,
-        "job_description": final_job_desc  # Return for use in bold keywords
+        "job_description": final_job_desc,  # Return for use in bold keywords
+        "recruiters": recruiters_raw # Already a JSON string of list
     }
 
 @router.post("/download")

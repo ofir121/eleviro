@@ -743,3 +743,80 @@ header h1 {
     color: var(--text-secondary);
     margin-bottom: 1rem;
 }
+
+/* Recruiters Section */
+.recruiters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.recruiter-card {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.recruiter-card:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
+    transform: translateY(-2px);
+}
+
+.recruiter-header {
+    margin-bottom: 0.75rem;
+}
+
+.recruiter-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+.recruiter-title {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.recruiter-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(56, 189, 248, 0.1);
+    color: var(--accent-color);
+    text-decoration: none;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    margin-top: 0.5rem;
+}
+
+.recruiter-link:hover {
+    background-color: rgba(56, 189, 248, 0.2);
+}
+
+.recruiter-link svg {
+    margin-right: 0.5rem;
+    fill: currentColor;
+    width: 16px;
+    height: 16px;
+}
+
+.recruiter-no-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-style: italic;
+    padding: 0.5rem;
+    margin-top: 0.5rem;
+}
