@@ -127,6 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const isBoldKeywords = document.getElementById('bold-keywords').checked;
+        const isTestingMode = document.getElementById('testing-mode').checked;
+
         try {
             // First, apply the changes
             const applyResponse = await fetch('/api/apply-changes', {
@@ -137,7 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     original_resume: originalResume,
                     accepted_suggestion_ids: Array.from(acceptedSuggestionIds),
-                    all_suggestions: allSuggestions
+                    all_suggestions: allSuggestions,
+                    bold_keywords: isBoldKeywords,
+                    job_description: currentJobDescription,
+                    is_testing_mode: isTestingMode
                 })
             });
 
@@ -398,6 +404,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const isBoldKeywords = document.getElementById('bold-keywords').checked;
+        const isTestingMode = document.getElementById('testing-mode').checked;
+
         try {
             const response = await fetch('/api/apply-changes', {
                 method: 'POST',
@@ -407,7 +416,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     original_resume: originalResume,
                     accepted_suggestion_ids: Array.from(acceptedSuggestionIds),
-                    all_suggestions: allSuggestions
+                    all_suggestions: allSuggestions,
+                    bold_keywords: isBoldKeywords,
+                    job_description: currentJobDescription,
+                    is_testing_mode: isTestingMode
                 })
             });
 
@@ -556,25 +568,8 @@ document.addEventListener('DOMContentLoaded', () => {
             roleTitle = data.role_title || 'Role';
             candidateName = data.candidate_name || 'Candidate';
 
-            // We need to capture the JD text used. 
-            // Ideally the backend returns it, but for now let's rely on the input logic if we can't get it back.
-            // Actually, the backend doesn't return the raw JD.
-            // Let's modify the backend return or just try to grab it from the form input for now?
-            // Issue: if URL is used, we don't have the text here unless we scrape it again or return it.
-            // BEST FIX: Ask backend to return 'final_job_desc'
-            // For this iteration, let's assume we update backend to return it OR just grab what we can.
-
-            // Wait, I can't easily modify backend return in this step without another tool call.
-            // Let's assume the user hasn't cleared the form and grab values.
-            const jobUrlInput = document.getElementById('job-url');
-            const jobTextInput = document.getElementById('job-description');
-
-            // This is imperfect (doesn't have scraped text), but good enough for now if we don't modify backend return.
-            // BETTER: Let's assume the user will copy/paste if needed, OR we rely on the backend endpoint
-            // accepting just the resume and generating blindly? No, need JD.
-
-            // Let's just use the text input if available.
-            currentJobDescription = jobTextInput.value || "Job description from URL: " + jobUrlInput.value;
+            // Use job description from backend (handles URL scraping properly)
+            currentJobDescription = data.job_description || '';
 
             // Populate results with Markdown rendering (with null checks)
             document.getElementById('job-summary-content').innerHTML = data.job_summary ? marked.parse(data.job_summary) : '<p>No job summary available</p>';

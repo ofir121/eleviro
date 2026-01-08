@@ -21,7 +21,8 @@ async def process_job(
     job_url: Optional[str] = Form(None),
     resume_text: Optional[str] = Form(None),
     resume_file: Optional[UploadFile] = File(None),
-    is_testing_mode: bool = Form(True)
+    is_testing_mode: bool = Form(True),
+    bold_keywords: bool = Form(True)
 ):
     # 1. Get Job Description
     final_job_desc = ""
@@ -56,16 +57,36 @@ async def process_job(
     formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
     
     # Now run remaining AI tasks concurrently
-    # Use formatted_resume_text for suggestions so original_text matches what we'll display/download
-    results = await asyncio.gather(
-        ai_service.summarize_job(final_job_desc, is_testing_mode),
-        ai_service.research_company(final_job_desc, is_testing_mode),
-        ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode),
-        ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode),
-        ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode)
-    )
+    # We launch independent tasks first
+    task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
+    task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
+    task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
+    task_suggestions = asyncio.create_task(ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode))
+    task_cover = asyncio.create_task(ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode))
 
-    job_summary, company_research_json, candidate_info_json, resume_suggestions_json, cover_letter = results
+    # We need the research result to get the job_type for bolding
+    # Await research task first
+    try:
+        company_research_json = await task_research
+        company_data = json.loads(company_research_json)
+        job_type = company_data.get("job_type", "General Role")
+    except Exception as e:
+        print(f"Error getting job type: {e}")
+        company_research_json = "{}" # Fallback
+        job_type = "General Role"
+
+    # Now launch bolding task with the specific job_type
+    if bold_keywords:
+        task_bolding = asyncio.create_task(ai_service.suggest_bold_changes(formatted_resume_text, final_job_desc, job_type, is_testing_mode))
+    else:
+        task_bolding = asyncio.create_task(asyncio.sleep(0))
+
+    # Await all other tasks
+    job_summary = await task_summary
+    candidate_info_json = await task_info
+    resume_suggestions_json = await task_suggestions
+    cover_letter = await task_cover
+    bolding_suggestions_raw = await task_bolding
     
     # Parse JSON response
     try:
@@ -75,6 +96,17 @@ async def process_job(
         print(f"Error parsing suggestions JSON: {e}")
         # Fallback to empty suggestions if parsing fails
         resume_suggestions = []
+
+    # Parse Bolding Suggestions (if any)
+    # The result from suggest_bold_changes is already a list of dicts (or None if asyncio.sleep was used)
+    if bolding_suggestions_raw and isinstance(bolding_suggestions_raw, list):
+        # We need to assign IDs to these suggestions so they don't conflict
+        # Start IDs after the last regular suggestion
+        start_id = max([s.get("id", 0) for s in resume_suggestions], default=0) + 1
+        
+        for i, suggestion in enumerate(bolding_suggestions_raw):
+            suggestion["id"] = start_id + i
+            resume_suggestions.append(suggestion)
 
     # Parse Company Research
     try:
@@ -113,7 +145,8 @@ async def process_job(
         "candidate_phone": candidate_phone,
         "resume_suggestions": resume_suggestions,
         "original_resume": formatted_resume_text,  # Use formatted version
-        "cover_letter": cover_letter
+        "cover_letter": cover_letter,
+        "job_description": final_job_desc  # Return for use in bold keywords
     }
 
 @router.post("/download")
@@ -184,6 +217,14 @@ async def apply_changes(request: ApplyChangesRequest):
                 flags=re.IGNORECASE
             )
         replacements_made += 1
+    
+    # Apply keyword bolding if enabled - REMOVED (Moved to suggestion phase)
+    # if request.bold_keywords and request.job_description:
+    #     modified_resume = await ai_service.bold_keywords(
+    #         modified_resume, 
+    #         request.job_description, 
+    #         request.is_testing_mode
+    #     )
     
     return {
         "modified_resume": modified_resume,

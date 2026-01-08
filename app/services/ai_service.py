@@ -80,12 +80,14 @@ async def research_company(job_description: str, is_testing_mode: bool = False) 
     
     # Task
     1. Identify the Company Name and Role Title.
-    2. Write a comprehensive markdown summary of the company.
+    2. Identify the **Standardized Job Type** (e.g., Data Engineer, Software Engineer, Product Manager, Sales Representative). This should be a broad category.
+    3. Write a comprehensive markdown summary of the company.
     
     # Output Format
     Return a valid JSON object with the following fields:
     - "company_name": The name of the hiring company. If not mentioned, use "Unknown Company".
     - "role_title": The title of the position.
+    - "job_type": The standardized job category (e.g., "Data Scientist", "Backend Engineer", "Sales Rep").
     - "company_summary_markdown": A markdown-formatted summary with the following sections:
         ## Company Mission
         (A brief overview of the company's mission and what they do)
@@ -437,3 +439,119 @@ async def generate_outreach(resume_text: str, job_description: str, outreach_typ
     </job_description>
     """
     return await get_completion(prompt, model=model)
+
+
+async def bold_keywords(resume_text: str, job_description: str, job_type: str = "General Role", is_testing_mode: bool = False) -> str:
+    model = TESTING_MODEL if is_testing_mode else writing_model
+    prompt = f"""
+    # Role
+    You are an Expert Technical Recruiter specializing in hiring **{job_type}** professionals. Your goal is to highlight *competence* and *action*.
+
+    # Task
+    Analyze the provided Resume and Job Description (JD). Apply markdown bolding (**keyword**) to the Resume text.
+    **CRITICAL GOAL**: Make the candidate's **Actions** and **Competencies** pop out. The recruiter wants to instantly see what the candidate DID (e.g., Led, Built, Creating).
+
+    # Constraints
+    1. **Preserve Content:** DO NOT change the text content. No grammar fixes or rewrites.
+    2. **Avoid Over-bolding:** Limit bolding to high-impact keywords (15-25% of a bullet).
+    3. **Existing Formatting:** Do not re-bold headers or existing bold text.
+    4. **Structure:** Keep the same bullet points and line structure.
+
+    # Bolding Strategy for a {job_type} (Prioritize in this order)
+    1. **Action-Driven Competencies (Top Priority):** Bold phrases where a strong verb demonstrates a key capability (e.g., "**Led a team**", "**Architected a solution**", "**Created a dashboard**"). The VERB is the hero here.
+    2. **Contextual Technologies:** Bold the technology *with* the action or context (e.g., "**Built** using **Python**", "**Deployed** on **AWS**").
+    3. **Core Requirements:** Bold specific "Must Haves" from the JD.
+    4. **Metrics (Lowest Priority):** Do NOT bold standalone numbers (e.g., "15%"). Only bold the impact description *around* the number (e.g., "**Reduced latency** by 40%").
+
+    # What NOT to Bold
+    - Do NOT bold generic buzzwords (e.g., "communication") unless it's a primary requirement.
+    - Do NOT bold entire sentences.
+    - Do NOT bold random numbers.
+
+    # Example Transformation
+    - JD Requirement (Data Engineer): "Experience with Java, Spring Boot, and Big Data pipelines."
+    - Original: Developed a microservices architecture using Java and Spring Boot that reduced latency by 40%.
+    - Improved: **Developed a microservices architecture** using **Java** and **Spring Boot** that **reduced latency** by 40%.
+    - Original: Led a team of 5 engineers to build a dashboard.
+    - Improved: **Led a team** of 5 engineers to **build a dashboard**.
+
+    # Input Data
+    <resume_text>
+    {resume_text}
+    </resume_text>
+    
+    <job_description>
+    {job_description}
+    </job_description>
+
+    # Output Instruction
+    Return ONLY the modified Resume markdown. Do not include any introductory or concluding remarks.
+    """
+    return await get_completion(prompt, model=model)
+
+
+async def suggest_bold_changes(resume_text: str, job_description: str, job_type: str = "General Role", is_testing_mode: bool = False) -> list:
+    """
+    Generate bolding suggestions by comparing original resume with AI-bolded version.
+    Returns a list of ResumeSuggestion objects.
+    """
+    import difflib
+
+    # 1. Get the bolded version of the resume
+    bolded_resume = await bold_keywords(resume_text, job_description, job_type, is_testing_mode)
+    
+    # 2. Robust Alignment using Difflib
+    # We want to match original lines to bolded lines even if some lines are added/removed/changed.
+    
+    original_lines = resume_text.split('\n')
+    bolded_lines = bolded_resume.split('\n')
+    
+    # We strip lines for comparison to handle whitespace differences, 
+    # but we keep original indices to map back to the UI.
+    
+    # helper to clean for diffing (ignore bold markers AND whitespace)
+    def clean_for_diff(text):
+        return text.replace('**', '').strip()
+
+    # Create sequence of "content" to match against
+    # We'll use the indices to map back.
+    matcher = difflib.SequenceMatcher(
+        None, 
+        [line.strip() for line in original_lines], 
+        [clean_for_diff(line) for line in bolded_lines]
+    )
+    
+    suggestions = []
+    
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            # Lines [i1:i2] in original match [j1:j2] in bolded (content-wise)
+            for k in range(i2 - i1):
+                orig_idx = i1 + k
+                bold_idx = j1 + k
+                
+                orig_text = original_lines[orig_idx]
+                bold_text = bolded_lines[bold_idx]
+                
+                # Check if this matching line actually has bolding
+                if '**' in bold_text and orig_text != bold_text:
+                    # Double check content equality to be safe (matcher is pretty good though)
+                    if clean_for_diff(bold_text) == orig_text.strip():
+                        suggestions.append({
+                            "id": 0,
+                            "section": "Keyword Optimization",
+                            "original_text": orig_text,
+                            "suggested_text": bold_text,
+                            "reason": "Highlighting key skills and metrics matching the job description.",
+                            "priority": "medium"
+                        })
+        elif tag == 'replace':
+            # The AI might have slightly changed the text (beyond just bolding).
+            # If it's a small change + bolding, we might want to suggest it, but riskier.
+            # For now, stick to 'equal' content to avoid hallucinations.
+            pass
+            
+    if not suggestions:
+        print(f"Debug: No bolding suggestions found. Stats: OrigLines={len(original_lines)}, BoldLines={len(bolded_lines)}")
+
+    return suggestions

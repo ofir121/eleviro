@@ -19,3 +19,6 @@ class ApplyChangesRequest(BaseModel):
     original_resume: str
     accepted_suggestion_ids: List[int]
     all_suggestions: List[ResumeSuggestion]
+    bold_keywords: bool = True
+    job_description: str = ""
+    is_testing_mode: bool = True
