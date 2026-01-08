@@ -4,7 +4,7 @@ from openai import AsyncOpenAI
 from langfuse.openai import openai as langfuse_openai
 import asyncio
 import aiohttp
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 from dotenv import load_dotenv
 
 load_dotenv()
