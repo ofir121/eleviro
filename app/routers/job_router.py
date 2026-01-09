@@ -97,28 +97,93 @@ async def process_job(
     candidate_info_json = await task_info
     resume_suggestions_json = await task_suggestions
     cover_letter = await task_cover
-    bolding_suggestions_raw = await task_bolding
+    # task_bolding is no longer concurrent
     recruiters_raw = await task_recruiters
     
-    # Parse JSON response
+    # Parse Rewrite Suggestions
     try:
         suggestions_data = json.loads(resume_suggestions_json)
         resume_suggestions = suggestions_data.get("suggestions", [])
     except json.JSONDecodeError as e:
         print(f"Error parsing suggestions JSON: {e}")
-        # Fallback to empty suggestions if parsing fails
         resume_suggestions = []
 
-    # Parse Bolding Suggestions (if any)
-    # The result from suggest_bold_changes is already a list of dicts (or None if asyncio.sleep was used)
+    # SERIALIZATION: Create "Virtual Resume" with rewrites applied
+    # We need a clean List[ResumeSuggestion] for the helper
+    # Currently resume_suggestions is a list of dicts. We convert to objects temporarily or just use logic.
+    # To reuse apply_suggestions_to_text, we need to adapt it or just inline simple logic here.
+    # Let's create a simple helper function outside (see below) to apply text improvements.
+    
+    virtual_resume_text = apply_suggestions_to_text(formatted_resume_text, resume_suggestions)
+
+    # Now launch bolding task on the VIRTUAL (rewritten) resume
+    bolding_suggestions_raw = []
+    if bold_keywords:
+        try:
+             bolding_suggestions_raw = await ai_service.suggest_bold_changes(virtual_resume_text, final_job_desc, job_type, is_testing_mode)
+        except Exception as e:
+            print(f"Error in bolding task: {e}")
+            bolding_suggestions_raw = []
+
+    # Merge Bolding into Rewrites
+    # Logic:
+    # 1. Start IDs after rewrites
+    start_id = max([s.get("id", 0) for s in resume_suggestions], default=0) + 1
+    
+    # 2. Create a map of {suggested_text: suggestion_object} from REWRITES
+    # We map the OUTPUT text of the rewrite to the suggestion object
+    rewrite_output_map = {}
+    for s in resume_suggestions:
+        rewrite_output_map[s.get("suggested_text", "").strip()] = s
+
+    # Helper for loose matching
+    def clean_bullet(text):
+        return re.sub(r'^[-*]\s+', '', text).strip()
+
     if bolding_suggestions_raw and isinstance(bolding_suggestions_raw, list):
-        # We need to assign IDs to these suggestions so they don't conflict
-        # Start IDs after the last regular suggestion
-        start_id = max([s.get("id", 0) for s in resume_suggestions], default=0) + 1
-        
-        for i, suggestion in enumerate(bolding_suggestions_raw):
-            suggestion["id"] = start_id + i
-            resume_suggestions.append(suggestion)
+        for i, bold_s in enumerate(bolding_suggestions_raw):
+            bold_orig = bold_s.get("original_text", "").strip()
+            bold_suggested = bold_s.get("suggested_text", "").strip()
+            
+            # Try 1: Exact Match of Output Text
+            match = rewrite_output_map.get(bold_orig)
+            
+            # Try 2: Loose Match (ignore bullets)
+            if not match:
+                clean_bold_orig = clean_bullet(bold_orig)
+                match = rewrite_output_map.get(clean_bold_orig)
+            
+            # Try 3: Check if Rewrite output is a substring of Bolding input (or vice versa)
+            # This handles cases where rewrite changed "content" inside a line, but bolding sees "bullet + content"
+            if not match:
+                for rewrite_text, rewrite_s in rewrite_output_map.items():
+                    # Check if rewrite text is contained in bold orig (e.g. rewrite="Foo", bold_orig="- Foo")
+                    # OR if bold orig is contained in rewrite text
+                    if rewrite_text and (rewrite_text in bold_orig or bold_orig in rewrite_text):
+                        match = rewrite_s
+                        break
+            
+            if match:
+                # MATCH FOUND: The bolding suggestion targets a line that was just rewritten
+                
+                # Careful Update: We need to preserve the bullet-less nature of the rewrite if it was bullet-less.
+                # If match['suggested_text'] is "Foo" and bold_suggested is "- **Foo**"
+                # We want result to be "**Foo**"
+                
+                # Heuristic: If rewrite text didn't start with bullet, but bold suggestion does, strip it.
+                rewrite_has_bullet = match['suggested_text'].strip().startswith(('-', '*'))
+                bold_has_bullet = bold_suggested.startswith(('-', '*'))
+                
+                final_text = bold_suggested
+                if bold_has_bullet and not rewrite_has_bullet:
+                    final_text = clean_bullet(bold_suggested)
+                
+                match["suggested_text"] = final_text
+                # Optional: Update reason or just keep rewrite reason
+            else:
+                # NO MATCH: This is a standalone bolding suggestion (on a line that wasn't rewritten)
+                bold_s["id"] = start_id + i
+                resume_suggestions.append(bold_s)
 
     # Parse Company Research
     try:
@@ -174,74 +239,67 @@ async def download_document(
         headers={"Content-Disposition": f'attachment; filename="{filename}.docx"'}
     )
 
+def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
+    """Helper to apply a list of suggestions (dict or obj) to text."""
+    modified_text = original_text
+    
+    # Sort by position in text to avoid conflicts
+    # Since we don't have positions in the dict, we search
+    suggestions_with_pos = []
+    
+    for s in suggestions:
+        # data might be dict or Pydantic object
+        orig = s.get("original_text") if isinstance(s, dict) else s.original_text
+        new_val = s.get("suggested_text") if isinstance(s, dict) else s.suggested_text
+        
+        if not orig: continue
+
+        # ROBUST STRATEGY: Split by whitespace, escape parts, join with \s+
+        # This ensures that any sequence of whitespace in the suggestion matches
+        # any sequence of whitespace (newline, space, tab) in the resume.
+        parts = re.split(r'\s+', orig.strip())
+        parts = [re.escape(p) for p in parts if p]
+        pattern = r'\s+'.join(parts)
+        
+        match = re.search(pattern, modified_text, re.IGNORECASE)
+        if match:
+            suggestions_with_pos.append((match.start(), pattern, new_val))
+
+    # Sort descending
+    suggestions_with_pos.sort(key=lambda x: x[0], reverse=True)
+    
+    for _, pattern, new_val in suggestions_with_pos:
+        if not new_val.strip():
+             # Deletion
+             # Try to remove the full line bullet if possible
+             full_line_pattern = r'^\s*[-*]\s*' + pattern + r'\s*$'
+             res, count = re.subn(full_line_pattern, '', modified_text, count=1, flags=re.IGNORECASE | re.MULTILINE)
+             if count == 0:
+                 modified_text = re.sub(pattern, '', modified_text, count=1, flags=re.IGNORECASE)
+             else:
+                 modified_text = res
+        else:
+            modified_text = re.sub(pattern, new_val, modified_text, count=1, flags=re.IGNORECASE)
+            
+    return modified_text
+
 @router.post("/apply-changes")
 async def apply_changes(request: ApplyChangesRequest):
     """
     Apply selected resume suggestions to the original resume text.
     """
-    modified_resume = request.original_resume
+    # Reuse the helper logic but adapt to input format
+    # The helper works on raw dicts/objects with 'original_text' and 'suggested_text'
+    # request.all_suggestions contains Pydantic models
     
-    # Create a mapping of suggestion IDs to suggestions
-    suggestions_dict = {s.id: s for s in request.all_suggestions}
+    suggestions_map = {s.id: s for s in request.all_suggestions}
+    accepted_list = [suggestions_map[sid] for sid in request.accepted_suggestion_ids if sid in suggestions_map]
     
-    # Get only the accepted suggestions
-    accepted_suggestions = [
-        suggestions_dict[sid] for sid in request.accepted_suggestion_ids 
-        if sid in suggestions_dict
-    ]
-    
-    # Sort by position in text (to avoid replacement conflicts)
-    # Find each original_text position and sort
-    suggestions_with_pos = []
-    for suggestion in accepted_suggestions:
-        # Use regex to handle whitespace variations
-        pattern = re.escape(suggestion.original_text)
-        pattern = re.sub(r'\\\s+', r'\\s+', pattern)  # Allow flexible whitespace
-        
-        match = re.search(pattern, modified_resume, re.IGNORECASE)
-        if match:
-            suggestions_with_pos.append((match.start(), suggestion))
-    
-    # Sort by position (descending) to avoid index shifting
-    suggestions_with_pos.sort(key=lambda x: x[0], reverse=True)
-    
-    # Apply replacements
-    replacements_made = 0
-    for pos, suggestion in suggestions_with_pos:
-        # Use regex for more flexible matching
-        pattern = re.escape(suggestion.original_text)
-        pattern = re.sub(r'\\\s+', r'\\s+', pattern)
-        
-        # Replace only the first occurrence (which should be at the position we found)
-        # If suggested_text is empty (deletion), remove the entire bullet point line
-        if not suggestion.suggested_text.strip():
-            full_line_pattern = r'^\s*[-*]\s*' + pattern + r'\s*$'
-            new_resume, count = re.subn(full_line_pattern, '', modified_resume, count=1, flags=re.IGNORECASE | re.MULTILINE)
-            if count > 0:
-                modified_resume = new_resume
-            else:
-                modified_resume = re.sub(pattern, '', modified_resume, count=1, flags=re.IGNORECASE)
-        else:
-            modified_resume = re.sub(
-                pattern, 
-                suggestion.suggested_text, 
-                modified_resume, 
-                count=1,
-                flags=re.IGNORECASE
-            )
-        replacements_made += 1
-    
-    # Apply keyword bolding if enabled - REMOVED (Moved to suggestion phase)
-    # if request.bold_keywords and request.job_description:
-    #     modified_resume = await ai_service.bold_keywords(
-    #         modified_resume, 
-    #         request.job_description, 
-    #         request.is_testing_mode
-    #     )
+    modified_resume = apply_suggestions_to_text(request.original_resume, accepted_list)
     
     return {
         "modified_resume": modified_resume,
-        "replacements_made": replacements_made,
+        "replacements_made": len(accepted_list),
         "total_accepted": len(request.accepted_suggestion_ids)
     }
 

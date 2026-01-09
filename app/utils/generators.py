@@ -137,52 +137,96 @@ def create_docx(content: str) -> BytesIO:
     first_h1_seen = False
     waiting_for_contact_info = False
 
+    # Buffering Logic
+    current_block_type = None  # 'normal', 'bullet'
+    current_block_lines = []
+
+    def flush_block():
+        nonlocal current_block_type, current_block_lines, waiting_for_contact_info
+        if not current_block_lines:
+            return
+
+        full_text = " ".join(current_block_lines)
+        current_block_lines = []
+
+        if current_block_type == 'bullet':
+            p = doc.add_paragraph(style='List Bullet')
+            p.paragraph_format.space_after = Pt(2)
+            process_text(p, full_text, font_size=Pt(10))
+        elif current_block_type == 'normal':
+            p = doc.add_paragraph()
+            
+            # Check if this is the contact info line
+            if waiting_for_contact_info:
+                p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                add_bottom_border(p)
+                waiting_for_contact_info = False  # Only center the first paragraph after name
+            
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(2)
+            process_text(p, full_text, font_size=Pt(10))
+        
+        current_block_type = None
+
     # Simple Markdown Parser
     lines = content.split('\n')
     for line in lines:
         line = line.strip()
         if not line:
+            flush_block()
             continue
             
-        if line.startswith('# '):
-            # Heading 1
-            text = line[2:].replace('**', '')
-            p = doc.add_heading(text, level=1)
-            
-            # Check if this is the first H1 (Candidate Name)
-            if not first_h1_seen:
-                p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-                # Increase font size for the name
-                for run in p.runs:
-                    run.font.size = Pt(24)
-                    run.font.name = 'Calibri'
-                
-                first_h1_seen = True
-                waiting_for_contact_info = True
-            else:
-                p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-                waiting_for_contact_info = False
+        # Identify Line Type
+        is_header = line.startswith(('# ', '## ', '### '))
+        # Table detection: must contain pipe, not be a bullet, and we shouldn't be expecting contact info
+        # (Contact info might use pipes as separators, so we treat it as text if waiting)
+        is_table_row = ('|' in line) and (not line.startswith(('- ', '* '))) and (not waiting_for_contact_info)
+        is_bullet = line.startswith(('- ', '* '))
 
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(4)
+        if is_header:
+            flush_block()
             
-        elif line.startswith('## '):
-            # Heading 2
-            waiting_for_contact_info = False
-            text = line[3:].replace('**', '')
-            p = doc.add_heading(text, level=2)
-            p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-            p.paragraph_format.space_before = Pt(8)
-            p.paragraph_format.space_after = Pt(2)
-        elif line.startswith('### '):
-            # Heading 3
-            waiting_for_contact_info = False
-            text = line[4:].replace('**', '')
-            p = doc.add_heading(text, level=3)
-            p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
-        elif '|' in line and not line.startswith('- ') and not line.startswith('* ') and not waiting_for_contact_info:
+            if line.startswith('# '):
+                # Heading 1
+                text = line[2:].replace('**', '')
+                p = doc.add_heading(text, level=1)
+                
+                # Check if this is the first H1 (Candidate Name)
+                if not first_h1_seen:
+                    p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                    # Increase font size for the name
+                    for run in p.runs:
+                        run.font.size = Pt(24)
+                        run.font.name = 'Calibri'
+                    
+                    first_h1_seen = True
+                    waiting_for_contact_info = True
+                else:
+                    p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+                    waiting_for_contact_info = False
+
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(4)
+                
+            elif line.startswith('## '):
+                # Heading 2
+                waiting_for_contact_info = False
+                text = line[3:].replace('**', '')
+                p = doc.add_heading(text, level=2)
+                p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+                p.paragraph_format.space_before = Pt(8)
+                p.paragraph_format.space_after = Pt(2)
+            elif line.startswith('### '):
+                # Heading 3
+                waiting_for_contact_info = False
+                text = line[4:].replace('**', '')
+                p = doc.add_heading(text, level=3)
+                p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+                p.paragraph_format.space_before = Pt(6)
+                p.paragraph_format.space_after = Pt(2)
+
+        elif is_table_row:
+            flush_block()
             waiting_for_contact_info = False
             # Handle Date Alignment (Role | Date)
             # Split on the LAST pipe to handle cases like "Role | Location | Date"
@@ -304,25 +348,29 @@ def create_docx(content: str) -> BytesIO:
                 # Fallback if split fails
                 p = doc.add_paragraph()
                 process_text(p, line)
-        elif line.startswith('- ') or line.startswith('* '):
+
+        elif is_bullet:
+            # Check if we were already in a bullet block; if not, flush whatever was before
+            if current_block_type != 'bullet':
+                 flush_block()
+            
+            # Start/Continue bullet block
+            current_block_type = 'bullet'
+            current_block_lines.append(line[2:].strip())
             waiting_for_contact_info = False
-            # Bullet point
-            p = doc.add_paragraph(style='List Bullet')
-            p.paragraph_format.space_after = Pt(2)
-            process_text(p, line[2:], font_size=Pt(10))
+
         else:
-            # Normal text
-            p = doc.add_paragraph()
-            
-            # Check if this is the contact info line
-            if waiting_for_contact_info:
-                p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-                add_bottom_border(p)
-                waiting_for_contact_info = False  # Only center the first paragraph after name
-            
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(2)
-            process_text(p, line, font_size=Pt(10))
+            # Normal text or continuation of previous block
+            if current_block_type in ['bullet', 'normal']:
+                current_block_lines.append(line)
+            else:
+                # Previous was Header/Table/None, start new Normal
+                flush_block()
+                current_block_type = 'normal'
+                current_block_lines.append(line)
+    
+    # Flush any remaining content
+    flush_block()
 
     file_stream = BytesIO()
     doc.save(file_stream)

@@ -343,6 +343,7 @@ async def suggest_resume_changes(resume_text: str, job_description: str, is_test
     - Ensure original_text EXACTLY matches text in the resume (case-sensitive).
     - Do not add tools, frameworks, metrics, numbers that are not present in the resume.
     - Do NOT use "<" or ">" symbols in the output content. Use "less than" or "more than" instead to avoid parsing issues.
+    - **CRITICAL: Do NOT use markdown bolding (i.e., double asterisks) in the suggested_text**. The formatting is handled by a separate process.
 
     # Guidelines for Improvements (High Priority)
     1. **Aggressive Keyword Optimization**: Identify missing hard skills/keywords from the JD and **forcefully** weave them into existing bullet points.
@@ -498,31 +499,21 @@ async def bold_keywords(resume_text: str, job_description: str, job_type: str = 
     return await get_completion(prompt, model=model)
 
 
-async def suggest_bold_changes(resume_text: str, job_description: str, job_type: str = "General Role", is_testing_mode: bool = False) -> list:
+def _extract_bolding_suggestions(original_text: str, bolded_text: str) -> list:
     """
-    Generate bolding suggestions by comparing original resume with AI-bolded version.
-    Returns a list of ResumeSuggestion objects.
+    Helper to extract bolding suggestions comparing original and bolded text.
+    Handles equal lines and re-wrapped lines (replace opcode).
     """
     import difflib
+    
+    original_lines = original_text.split('\n')
+    bolded_lines = bolded_text.split('\n')
 
-    # 1. Get the bolded version of the resume
-    bolded_resume = await bold_keywords(resume_text, job_description, job_type, is_testing_mode)
-    
-    # 2. Robust Alignment using Difflib
-    # We want to match original lines to bolded lines even if some lines are added/removed/changed.
-    
-    original_lines = resume_text.split('\n')
-    bolded_lines = bolded_resume.split('\n')
-    
-    # We strip lines for comparison to handle whitespace differences, 
-    # but we keep original indices to map back to the UI.
-    
     # helper to clean for diffing (ignore bold markers AND whitespace)
     def clean_for_diff(text):
         return text.replace('**', '').strip()
 
     # Create sequence of "content" to match against
-    # We'll use the indices to map back.
     matcher = difflib.SequenceMatcher(
         None, 
         [line.strip() for line in original_lines], 
@@ -543,7 +534,7 @@ async def suggest_bold_changes(resume_text: str, job_description: str, job_type:
                 
                 # Check if this matching line actually has bolding
                 if '**' in bold_text and orig_text != bold_text:
-                    # Double check content equality to be safe (matcher is pretty good though)
+                    # Double check content equality to be safe
                     if clean_for_diff(bold_text) == orig_text.strip():
                         suggestions.append({
                             "id": 0,
@@ -553,16 +544,57 @@ async def suggest_bold_changes(resume_text: str, job_description: str, job_type:
                             "reason": "Highlighting key skills and metrics matching the job description.",
                             "priority": "medium"
                         })
+                        
         elif tag == 'replace':
-            # The AI might have slightly changed the text (beyond just bolding).
-            # If it's a small change + bolding, we might want to suggest it, but riskier.
-            # For now, stick to 'equal' content to avoid hallucinations.
-            pass
+            # Handle potential wrapping or multi-line bolding
+            # AI might have re-wrapped the text. Check if "content" is identical when joined.
+            orig_segment = original_lines[i1:i2]
+            bold_segment = bolded_lines[j1:j2]
             
+            # Normalize: join, remove spaces, remove bold markers
+            orig_combined = "".join(orig_segment).replace(" ", "")
+            bold_combined = "".join(bold_segment).replace("**", "").replace(" ", "")
+            
+            if orig_combined == bold_combined and orig_combined: # Ensure not empty
+                 # MATCH FOUND despite wrapping changes
+                 
+                 # We want to map this back to "original_text" vs "suggested_text".
+                 # Since it spans multiple lines, we should probably suggest replacing the *entire block*.
+                 
+                 # However, the UI might expect single lines. 
+                 # If the UI handles multi-line replacement, we can send the joined block.
+                 # Let's send the joined block with newlines.
+                 
+                 original_block = "\n".join(orig_segment)
+                 suggested_block = "\n".join(bold_segment)
+                 
+                 # Only suggest if there is actual bolding and it changed
+                 if '**' in suggested_block and original_block != suggested_block:
+                     suggestions.append({
+                        "id": 0,
+                        "section": "Keyword Optimization",
+                        "original_text": original_block,
+                        "suggested_text": suggested_block,
+                        "reason": "Highlighting key skills and metrics matching the job description.",
+                        "priority": "medium"
+                    })
+
     if not suggestions:
         print(f"Debug: No bolding suggestions found. Stats: OrigLines={len(original_lines)}, BoldLines={len(bolded_lines)}")
 
     return suggestions
+
+
+async def suggest_bold_changes(resume_text: str, job_description: str, job_type: str = "General Role", is_testing_mode: bool = False) -> list:
+    """
+    Generate bolding suggestions by comparing original resume with AI-bolded version.
+    Returns a list of ResumeSuggestion objects.
+    """
+    # 1. Get the bolded version of the resume
+    bolded_resume = await bold_keywords(resume_text, job_description, job_type, is_testing_mode)
+    
+    # 2. Extract suggestions using robust diff logic
+    return _extract_bolding_suggestions(resume_text, bolded_resume)
 
 
 async def find_recruiters(company_name: str, job_description: str = "", limit: int = 5, is_testing_mode: bool = False) -> str:
