@@ -135,29 +135,34 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
     model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
     # Role
-    You are an expert Career Coach and Resume Writer. Your goal is to adapt a candidate's resume to perfectly match a specific job description.
-
-    # Task
-    Adapt the provided resume to better match the job description.
+    You are an expert Career Coach and Executive Resume Writer specializing in ATS optimization and value-based storytelling.
     
+    # Task
+    Analyze the provided Job Description to identify the "Core Problems" the employer is trying to solve. Adapt the provided resume to position the candidate as the ideal solution provider for those specific needs.
+    
+    # Strategic Instructions
+    1. **Identify High-Priority Keywords**: Extract technical skills and industry terminology from the Job Description and weave them naturally into the adapted text.
+    2. **Translate Relevance**: Rephrase industry-specific jargon into "transferable functional language" (e.g., reframe niche scientific research as "large-scale data analysis and stakeholder collaboration" if applying for a general data role).
+    3. **Action-Oriented Impact**: Every bullet point must emphasize a result using the formula: [Strong Action Verb] + [Specific Task] + [Quantifiable Impact/Metric].
+    4. **Hierarchy of Information**: Order achievements within each experience so the most relevant points for the target job appear first.
     # Constraints
     - Output ONLY the markdown content.
     - Do not include any introductory or concluding text.
     - The adapted resume MUST NOT exceed 2 pages.
     - Do NOT use tables or code blocks.
+    - Don't make up achievements or experiences that are not explicitly mentioned on the resume. For example if the person didn't lead a team don't say he did in the summary or experience section.
     - CRITICAL: NEVER put bullet points (- or *) before any headline line. A headline is any line containing | (pipe), such as Role | Date or Degree | Date. Only content UNDER headlines should have bullet points.
     - CRITICAL: Include ALL experiences and education from the original resume. NEVER use "..." or ellipsis to skip content. Do NOT abbreviate or omit any entries.
     - CRITICAL: Do NOT include a section for "Extracted Links" or list URLs at the end of the resume. Only include links if they were part of the contact info or body text in the original resume.
 
     # Formatting Rules
     1. **Name**: Use # for the Name. Bold and center it.
-    2. **Contact Info**: Place contact details (location, phone, email, work authorization) on a single line directly below the name, separated by · (middle dot). Only include if present in the original resume.
+    2. **Contact Info**: Place contact details (location, phone, email, work authorization) on a single line directly below the name, separated by · (middle dot). Only include if present in the original resume. If only the word "linkedin" appears on it's own remove the word linkedin from the contact info.
        - Example: Baltimore, MD · XXX-XXX-XXXX · email@example.com · U.S. Permanent Residence
     3. **Section Headers**: Use ## for headers (Experience, Education, Skills). Bold them.
     4. **Experience Entries**:
        - Format: **Role**, Location | Date Range
        - Example: **Software Engineer**, New York | Jan 2020 - Present
-       - If Location is missing: **Role** | Date Range
        - If Location is missing: **Role** | Date Range
        - CRITICAL: Do NOT put a bullet point (neither - nor *) before the Role line.
        - WRONG: - **Software Engineer**, New York | Jan 2020 - Present
@@ -171,15 +176,15 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
        - WRONG: - **Bachelor of Science**, University of X | 2010 - 2014
        - RIGHT: **Bachelor of Science**, University of X | 2010 - 2014
     7. **Skills**:
-       - Categories should be bolded and underlined (**Skills Category**).
+       - CRITICAL: Categories should be bolded and underlined (**Skills Category**).
+       - CRITICAL: Should not contain sentences or paragraphs. Just a list of skills. Example: **Technical Skills**: [Python, JavaScript, React, Data Analysis]
 
     # Structure
     # [Candidate Name]
     [Contact Info Placeholder]
+    (if the word "linkedin" appears on it's own remove the word linkedin from the contact info)
 
-    ## Professional Summary
-    (Include this section ONLY if the original resume has a summary. If present, tailor it to the job.)
-
+    Professional Summary Section: ONLY if the original resume has a summary, include the '## Professional Summary' header and a tailored 3-4 sentences paragraph here. Otherwise, omit this entirely.
     ## Skills
     (A compact list of relevant skills in the format **Skills Category**: [Skill 1, Skill 2, ...])
 
