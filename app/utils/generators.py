@@ -101,6 +101,22 @@ def process_text(paragraph, text, default_bold=False, default_color=None, font_s
             if default_color: run.font.color.rgb = default_color
             if font_size: run.font.size = font_size
 
+def add_bottom_border(paragraph):
+    """
+    Add a bottom border to a paragraph.
+    """
+    p = paragraph._p
+    pPr = p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    pPr.append(pBdr)
+    
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), '6')
+    bottom.set(qn('w:space'), '1')
+    bottom.set(qn('w:color'), 'auto')
+    pBdr.append(bottom)
+
 def create_docx(content: str) -> BytesIO:
     doc = Document()
     
@@ -166,7 +182,7 @@ def create_docx(content: str) -> BytesIO:
             p.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
-        elif '|' in line and not line.startswith('- ') and not line.startswith('* '):
+        elif '|' in line and not line.startswith('- ') and not line.startswith('* ') and not waiting_for_contact_info:
             waiting_for_contact_info = False
             # Handle Date Alignment (Role | Date)
             # Split on the LAST pipe to handle cases like "Role | Location | Date"
@@ -301,6 +317,7 @@ def create_docx(content: str) -> BytesIO:
             # Check if this is the contact info line
             if waiting_for_contact_info:
                 p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                add_bottom_border(p)
                 waiting_for_contact_info = False  # Only center the first paragraph after name
             
             p.paragraph_format.space_before = Pt(0)
