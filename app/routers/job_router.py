@@ -35,6 +35,10 @@ async def process_job(
     else:
         raise HTTPException(status_code=400, detail="Please provide either a Job Description text or URL.")
 
+    # [OPTIMIZATION] Start Job-related tasks immediately (don't wait for resume parsing)
+    task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
+    task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
+
     # 2. Get Resume Text
     final_resume_text = ""
     if resume_text:
@@ -52,20 +56,16 @@ async def process_job(
     if not final_job_desc or not final_resume_text:
          raise HTTPException(status_code=400, detail="Could not extract text from inputs.")
 
-    # First, format the resume to get a clean markdown version
-    # This needs to run first because suggest_resume_changes needs to match against this text
+    # 3. Format Resume (Must be done before other resume tasks)
     formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
     
-    # Now run remaining AI tasks concurrently
-    # We launch independent tasks first
-    task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
-    task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
+    # 4. Start Resume-related tasks concurrently
     task_suggestions = asyncio.create_task(ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode))
     task_cover = asyncio.create_task(ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode))
     task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
 
-    # We need the research result to get the job_type for bolding AND company name for recruiters
-    # Await research task first
+    # 5. Get Research Results (needed for Job Type & Recruiters)
+    # We await this now so we can start dependent tasks
     try:
         company_research_json = await task_research
         company_data = json.loads(company_research_json)
@@ -77,27 +77,25 @@ async def process_job(
         job_type = "General Role"
         company_name_extracted = ""
 
-    # Launch recruiter search if we have a company name
-    if company_name_extracted and company_name_extracted != "Unknown Company":
-        task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
-    else:
-        # Assuming we still want to try internal search even if company name is unknown?
-        # Actually yes, if the JD has a contact person, we want it.
-        task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
+    # 6. Start Dependent Tasks (Recruiters & Bolding)
+    
+    # Recruiter Search
+    task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
 
-
-    # Now launch bolding task with the specific job_type
+    # Bolding (Now runs in parallel with Suggestions!)
     if bold_keywords:
+        # Note: We run bolding on formatted_resume_text. Currently we do NOT wait for rewrites.
+        # The merging logic handles applying these bold matches to rewritten text if needed.
         task_bolding = asyncio.create_task(ai_service.suggest_bold_changes(formatted_resume_text, final_job_desc, job_type, is_testing_mode))
     else:
-        task_bolding = asyncio.create_task(asyncio.sleep(0))
+        task_bolding = asyncio.create_task(asyncio.sleep(0, result=[]))
 
-    # Await all other tasks
+    # 7. Await All Remaining Tasks
     job_summary = await task_summary
     candidate_info_json = await task_info
     resume_suggestions_json = await task_suggestions
     cover_letter = await task_cover
-    # task_bolding is no longer concurrent
+    bolding_suggestions_raw = await task_bolding
     recruiters_raw = await task_recruiters
     
     # Parse Rewrite Suggestions
@@ -108,22 +106,8 @@ async def process_job(
         print(f"Error parsing suggestions JSON: {e}")
         resume_suggestions = []
 
-    # SERIALIZATION: Create "Virtual Resume" with rewrites applied
-    # We need a clean List[ResumeSuggestion] for the helper
-    # Currently resume_suggestions is a list of dicts. We convert to objects temporarily or just use logic.
-    # To reuse apply_suggestions_to_text, we need to adapt it or just inline simple logic here.
-    # Let's create a simple helper function outside (see below) to apply text improvements.
-    
-    virtual_resume_text = apply_suggestions_to_text(formatted_resume_text, resume_suggestions)
-
-    # Now launch bolding task on the VIRTUAL (rewritten) resume
-    bolding_suggestions_raw = []
-    if bold_keywords:
-        try:
-             bolding_suggestions_raw = await ai_service.suggest_bold_changes(virtual_resume_text, final_job_desc, job_type, is_testing_mode)
-        except Exception as e:
-            print(f"Error in bolding task: {e}")
-            bolding_suggestions_raw = []
+    # [REMOVED] Redundant "Virtual Resume" creation and sequential bolding call.
+    # We now trust the parallel bolding result and the merging logic.
 
     # Merge Bolding into Rewrites
     # Logic:
@@ -145,7 +129,7 @@ async def process_job(
             bold_orig = bold_s.get("original_text", "").strip()
             bold_suggested = bold_s.get("suggested_text", "").strip()
             
-            # Try 1: Exact Match of Output Text
+            # Try 1: Exact Match of Output Text (Unlikely if it was rewritten, but check if user didn't change it)
             match = rewrite_output_map.get(bold_orig)
             
             # Try 2: Loose Match (ignore bullets)
@@ -154,11 +138,8 @@ async def process_job(
                 match = rewrite_output_map.get(clean_bold_orig)
             
             # Try 3: Check if Rewrite output is a substring of Bolding input (or vice versa)
-            # This handles cases where rewrite changed "content" inside a line, but bolding sees "bullet + content"
             if not match:
                 for rewrite_text, rewrite_s in rewrite_output_map.items():
-                    # Check if rewrite text is contained in bold orig (e.g. rewrite="Foo", bold_orig="- Foo")
-                    # OR if bold orig is contained in rewrite text
                     if rewrite_text and (rewrite_text in bold_orig or bold_orig in rewrite_text):
                         match = rewrite_s
                         break
@@ -167,10 +148,6 @@ async def process_job(
                 # MATCH FOUND: The bolding suggestion targets a line that was just rewritten
                 
                 # Careful Update: We need to preserve the bullet-less nature of the rewrite if it was bullet-less.
-                # If match['suggested_text'] is "Foo" and bold_suggested is "- **Foo**"
-                # We want result to be "**Foo**"
-                
-                # Heuristic: If rewrite text didn't start with bullet, but bold suggestion does, strip it.
                 rewrite_has_bullet = match['suggested_text'].strip().startswith(('-', '*'))
                 bold_has_bullet = bold_suggested.startswith(('-', '*'))
                 
@@ -179,9 +156,8 @@ async def process_job(
                     final_text = clean_bullet(bold_suggested)
                 
                 match["suggested_text"] = final_text
-                # Optional: Update reason or just keep rewrite reason
             else:
-                # NO MATCH: This is a standalone bolding suggestion (on a line that wasn't rewritten)
+                # NO MATCH: This is a standalone bolding suggestion
                 bold_s["id"] = start_id + i
                 resume_suggestions.append(bold_s)
 
@@ -221,10 +197,10 @@ async def process_job(
         "candidate_email": candidate_email,
         "candidate_phone": candidate_phone,
         "resume_suggestions": resume_suggestions,
-        "original_resume": formatted_resume_text,  # Use formatted version
+        "original_resume": formatted_resume_text,
         "cover_letter": cover_letter,
-        "job_description": final_job_desc,  # Return for use in bold keywords
-        "recruiters": recruiters_raw # Already a JSON string of list
+        "job_description": final_job_desc,
+        "recruiters": recruiters_raw
     }
 
 @router.post("/download")
