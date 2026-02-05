@@ -1,4 +1,8 @@
-from app.routers.job_router import apply_suggestions_to_text
+from app.routers.job_router import (
+    apply_suggestions_to_text,
+    merge_bolding_into_rewrites,
+    _apply_bolding_pattern,
+)
 from app.models.suggestions import ResumeSuggestion
 from app.utils.parsers import is_plausible_phone, extract_contact_from_text, ExtractedContact
 
@@ -152,6 +156,108 @@ def test_candidate_phone_from_extracted_resume_text():
     assert any("555" in p for p in contact.phones)
     assert not any("July" in p or "Present" in p for p in contact.phones)
     assert is_plausible_phone(contact.phones[0])
+
+
+def test_apply_bolding_pattern_same_content():
+    """Bolding pattern transfers ** to same word positions in rewrite."""
+    bold_suggested = "**Led** the **team** to achieve **20%** growth"
+    rewrite_suggested = "Led the team to achieve 25% growth"
+    result = _apply_bolding_pattern(bold_suggested, rewrite_suggested)
+    assert result == "**Led** the **team** to achieve **25%** growth"
+
+
+def test_apply_bolding_pattern_with_bullet():
+    """When both lines have the same structure (e.g. bullet), bolding applies by word position."""
+    bold_suggested = "- **Led** the **team** to succeed"
+    rewrite_suggested = "- Led the team to exceed targets"
+    result = _apply_bolding_pattern(bold_suggested, rewrite_suggested)
+    assert result == "- **Led** the **team** to exceed targets"
+
+
+def test_merge_bolding_into_rewrites_by_original_avoids_duplicate():
+    """
+    When a rewrite changes the line (e.g. 20% -> 25%) and bolding targets the original line,
+    we merge into the rewrite so there is one suggestion with bold, not two (one with bold, one without).
+    """
+    resume_suggestions = [
+        {
+            "id": 1,
+            "section": "Experience",
+            "original_text": "Led the team to achieve 20% growth",
+            "suggested_text": "Led the team to achieve 25% growth",
+            "reason": "Stronger metric",
+            "priority": "high",
+        }
+    ]
+    bolding_suggestions_raw = [
+        {
+            "id": 0,
+            "section": "Keyword Optimization",
+            "original_text": "Led the team to achieve 20% growth",
+            "suggested_text": "**Led** the **team** to achieve **20%** growth",
+            "reason": "Highlight key skills",
+            "priority": "medium",
+        }
+    ]
+    merge_bolding_into_rewrites(resume_suggestions, bolding_suggestions_raw)
+    assert len(resume_suggestions) == 1
+    assert resume_suggestions[0]["suggested_text"] == "**Led** the **team** to achieve **25%** growth"
+
+
+def test_merge_bolding_into_rewrites_by_suggested_text_unchanged_line():
+    """When rewrite did not change the line, merge uses bolding's suggested_text as-is."""
+    resume_suggestions = [
+        {
+            "id": 1,
+            "section": "Experience",
+            "original_text": "Led the team",
+            "suggested_text": "Led the team",
+            "reason": "Keep",
+            "priority": "low",
+        }
+    ]
+    bolding_suggestions_raw = [
+        {
+            "id": 0,
+            "section": "Keyword Optimization",
+            "original_text": "Led the team",
+            "suggested_text": "**Led** the **team**",
+            "reason": "Highlight",
+            "priority": "medium",
+        }
+    ]
+    merge_bolding_into_rewrites(resume_suggestions, bolding_suggestions_raw)
+    assert len(resume_suggestions) == 1
+    assert resume_suggestions[0]["suggested_text"] == "**Led** the **team**"
+
+
+def test_merge_bolding_standalone_when_no_rewrite():
+    """When there is no rewrite for a line, bolding is added as a standalone suggestion."""
+    resume_suggestions = [
+        {
+            "id": 1,
+            "section": "Experience",
+            "original_text": "Other bullet",
+            "suggested_text": "Other bullet improved",
+            "reason": "r",
+            "priority": "high",
+        }
+    ]
+    bolding_suggestions_raw = [
+        {
+            "id": 0,
+            "section": "Keyword Optimization",
+            "original_text": "Led the team to achieve 20% growth",
+            "suggested_text": "**Led** the **team** to achieve **20%** growth",
+            "reason": "Highlight",
+            "priority": "medium",
+        }
+    ]
+    merge_bolding_into_rewrites(resume_suggestions, bolding_suggestions_raw)
+    assert len(resume_suggestions) == 2
+    assert resume_suggestions[0]["suggested_text"] == "Other bullet improved"
+    assert resume_suggestions[1]["original_text"] == "Led the team to achieve 20% growth"
+    assert "**Led**" in resume_suggestions[1]["suggested_text"]
 
 
 def test_apply_changes_endpoint(client):

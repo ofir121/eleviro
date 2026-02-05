@@ -150,57 +150,7 @@ async def process_job(
     # [REMOVED] Redundant "Virtual Resume" creation and sequential bolding call.
     # We now trust the parallel bolding result and the merging logic.
 
-    # Merge Bolding into Rewrites
-    # Logic:
-    # 1. Start IDs after rewrites
-    start_id = max([s.get("id", 0) for s in resume_suggestions], default=0) + 1
-    
-    # 2. Create a map of {suggested_text: suggestion_object} from REWRITES
-    # We map the OUTPUT text of the rewrite to the suggestion object
-    rewrite_output_map = {}
-    for s in resume_suggestions:
-        rewrite_output_map[s.get("suggested_text", "").strip()] = s
-
-    # Helper for loose matching
-    def clean_bullet(text):
-        return re.sub(r'^[-*]\s+', '', text).strip()
-
-    if bolding_suggestions_raw and isinstance(bolding_suggestions_raw, list):
-        for i, bold_s in enumerate(bolding_suggestions_raw):
-            bold_orig = bold_s.get("original_text", "").strip()
-            bold_suggested = bold_s.get("suggested_text", "").strip()
-            
-            # Try 1: Exact Match of Output Text (Unlikely if it was rewritten, but check if user didn't change it)
-            match = rewrite_output_map.get(bold_orig)
-            
-            # Try 2: Loose Match (ignore bullets)
-            if not match:
-                clean_bold_orig = clean_bullet(bold_orig)
-                match = rewrite_output_map.get(clean_bold_orig)
-            
-            # Try 3: Check if Rewrite output is a substring of Bolding input (or vice versa)
-            if not match:
-                for rewrite_text, rewrite_s in rewrite_output_map.items():
-                    if rewrite_text and (rewrite_text in bold_orig or bold_orig in rewrite_text):
-                        match = rewrite_s
-                        break
-            
-            if match:
-                # MATCH FOUND: The bolding suggestion targets a line that was just rewritten
-                
-                # Careful Update: We need to preserve the bullet-less nature of the rewrite if it was bullet-less.
-                rewrite_has_bullet = match['suggested_text'].strip().startswith(('-', '*'))
-                bold_has_bullet = bold_suggested.startswith(('-', '*'))
-                
-                final_text = bold_suggested
-                if bold_has_bullet and not rewrite_has_bullet:
-                    final_text = clean_bullet(bold_suggested)
-                
-                match["suggested_text"] = final_text
-            else:
-                # NO MATCH: This is a standalone bolding suggestion
-                bold_s["id"] = start_id + i
-                resume_suggestions.append(bold_s)
+    merge_bolding_into_rewrites(resume_suggestions, bolding_suggestions_raw)
 
     # Parse Company Research
     try:
@@ -295,6 +245,99 @@ def _parse_markdown_sections(text: str) -> list:
         name, start, _ = sections[i]
         sections[i] = (name, start, sections[i + 1][1])
     return sections
+
+
+def merge_bolding_into_rewrites(resume_suggestions: list, bolding_suggestions_raw: list) -> None:
+    """
+    Merge bolding suggestions into rewrite suggestions in-place.
+    When a bolding suggestion targets the same line as a rewrite (by original_text or suggested_text),
+    the rewrite's suggested_text is updated to include bold; the bolding suggestion is not added as
+    a separate item, avoiding duplicate suggestions (one with bold, one without).
+    """
+    if not bolding_suggestions_raw or not isinstance(bolding_suggestions_raw, list):
+        return
+    start_id = max([s.get("id", 0) for s in resume_suggestions], default=0) + 1
+
+    rewrite_output_map = {}
+    rewrite_original_map = {}
+    for s in resume_suggestions:
+        rewrite_output_map[s.get("suggested_text", "").strip()] = s
+
+    def clean_bullet(text):
+        return re.sub(r"^[-*]\s+", "", text).strip()
+
+    for s in resume_suggestions:
+        orig = clean_bullet(s.get("original_text", ""))
+        if orig and orig not in rewrite_original_map:
+            rewrite_original_map[orig] = s
+
+    for i, bold_s in enumerate(bolding_suggestions_raw):
+        bold_orig = bold_s.get("original_text", "").strip()
+        bold_suggested = bold_s.get("suggested_text", "").strip()
+        clean_bold_orig = clean_bullet(bold_orig)
+
+        match = rewrite_output_map.get(bold_orig)
+        if not match:
+            match = rewrite_output_map.get(clean_bold_orig)
+        if not match:
+            for rewrite_text, rewrite_s in rewrite_output_map.items():
+                if rewrite_text and (rewrite_text in bold_orig or bold_orig in rewrite_text):
+                    match = rewrite_s
+                    break
+        if not match:
+            match = rewrite_original_map.get(clean_bold_orig)
+            if not match and clean_bold_orig:
+                match = rewrite_original_map.get(bold_orig)
+
+        if match:
+            rewrite_has_bullet = match["suggested_text"].strip().startswith(("-", "*"))
+            bold_has_bullet = bold_suggested.startswith(("-", "*"))
+            if match.get("suggested_text", "").strip() in (bold_orig, clean_bold_orig):
+                final_text = bold_suggested
+                if bold_has_bullet and not rewrite_has_bullet:
+                    final_text = clean_bullet(bold_suggested)
+                match["suggested_text"] = final_text
+            else:
+                final_text = _apply_bolding_pattern(bold_suggested, match["suggested_text"])
+                match["suggested_text"] = final_text
+        else:
+            bold_s["id"] = start_id + i
+            resume_suggestions.append(bold_s)
+
+
+def _apply_bolding_pattern(bold_suggested: str, rewrite_suggested: str) -> str:
+    """
+    Apply the bolding pattern from bold_suggested (markdown with **) to rewrite_suggested.
+    Uses word-position alignment: same word indices that are bolded in the original get bolded
+    in the rewrite (e.g. so "20%" -> "25%" still gets bolded).
+    """
+    content_no_bold = re.sub(r"\*\*", "", bold_suggested).strip()
+    words_orig = content_no_bold.split()
+    if not words_orig:
+        return rewrite_suggested
+    bold_indices = set()
+    pos = 0
+    for m in re.finditer(r"\*\*([^*]+)\*\*", bold_suggested):
+        phrase = m.group(1).strip()
+        if not phrase:
+            continue
+        idx = content_no_bold.find(phrase, pos)
+        if idx < 0:
+            continue
+        start_word = len(content_no_bold[:idx].split())
+        n_words = len(phrase.split())
+        for i in range(start_word, min(start_word + n_words, len(words_orig))):
+            bold_indices.add(i)
+        pos = idx + len(phrase)
+    words_rewrite = rewrite_suggested.split()
+    n = min(len(words_rewrite), len(words_orig))
+    parts = []
+    for i in range(len(words_rewrite)):
+        if i < n and i in bold_indices:
+            parts.append("**" + words_rewrite[i] + "**")
+        else:
+            parts.append(words_rewrite[i])
+    return " ".join(parts)
 
 
 def _section_name_matches(suggestion_section: str, header_name: str) -> bool:

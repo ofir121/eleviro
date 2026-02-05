@@ -43,6 +43,21 @@ preamble, _ = extract_sections_by_regex(text)
 
 ---
 
+### 1.3.1 Duplicate suggestions: one with bold, one without (FIXED)
+
+**Location:** `app/routers/job_router.py` – merge of bolding suggestions into rewrite suggestions
+
+**Issue:** The same line could appear as two suggestions: (1) a rewrite suggestion (improved text, no bold) and (2) a bolding suggestion (same or original line with **). Merging only matched when the rewrite’s **suggested_text** equaled the bolding’s **original_text**. When the rewrite actually changed the text (e.g. "20%" → "25%"), no match was found and the bolding was added as a standalone suggestion → duplication.
+
+**Root cause:** Match key was rewrite output (suggested_text) vs bolding input (original_text). So we only merged when the rewrite left the line unchanged.
+
+**Fix (implemented):**
+1. Also match bolding to rewrites by **original_text**: same line in the resume (rewrite.original_text ≈ bold_orig).
+2. When a rewrite is found by original_text, apply the bolding pattern from the bolding suggestion to the rewrite’s suggested_text (e.g. bold same word positions), so one suggestion shows improved text with bold.
+3. Do not add bolding as a standalone suggestion when it was merged into a rewrite (by suggested_text or by original_text).
+
+---
+
 ### 1.4 Apply suggestions: first-match-only replacement
 
 **Location:** `app/routers/job_router.py` – `apply_suggestions_to_text()`
