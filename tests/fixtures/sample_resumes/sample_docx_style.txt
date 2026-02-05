@@ -1,0 +1,18 @@
+Alex Chen
+Boston, MA | alex@example.com | 555-999-0000
+
+Summary
+Data analyst with focus on visualization.
+
+Experience
+Analyst | Acme Inc. | 2019 – Present
+- Built reports in Tableau. | Delivered weekly metrics. | Collaborated with product.
+Intern | Beta Co. | 2018
+- Data entry and validation.
+
+Education
+MS Data Science, State University | 2018
+BS Statistics | 2016
+
+Skills
+SQL | Python | Tableau | Excel

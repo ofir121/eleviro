@@ -66,3 +66,22 @@ uvicorn main:app --reload
 ```
 
 Open your browser and navigate to `http://localhost:8000` to start using Eleviro.
+
+---
+
+## Parser extensibility (developers)
+
+### Adding a new section pattern
+
+Section headers (e.g. “Experience”, “Technical Skills”) are configured in **`app/config/section_patterns.py`**:
+
+- **`CANONICAL_SECTION_ORDER`** — order of sections when rebuilding full text.
+- **`SECTION_HEADER_VARIANTS`** — `Dict[canonical_name, List[variant_string]]`. Example: `"summary": ["Professional Summary", "Summary", "Profile"]`.
+
+To support a new section (e.g. “Patents”): add a key to `SECTION_HEADER_VARIANTS` and append the canonical name to `CANONICAL_SECTION_ORDER`. No changes are required in `app/utils/parsers.py`; patterns are compiled at import via `build_section_patterns()`.
+
+### Adding a new format (e.g. RTF)
+
+1. Implement an extractor: `def extract_rtf(content: bytes) -> str` that returns raw text.
+2. Register it in **`DEFAULT_PIPELINE_CONFIG.extractors`** in `app/utils/parsers.py`, e.g. `"application/rtf": _extract_raw_rtf`.
+3. In the upload route (e.g. `job_router`), accept the new extension and call `run_pipeline(content, "application/rtf", DEFAULT_PIPELINE_CONFIG)` (or pass a custom `PipelineConfig`).

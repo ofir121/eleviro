@@ -196,8 +196,8 @@ preamble, _ = extract_sections_by_regex(text)
 | Step | Description | Status |
 |------|-------------|--------|
 | 4.1 | **Section-aware apply:** When `original_resume` is markdown with `## Section` headers, split by `## ` and identify section names. For each suggestion with a `section` field, restrict `re.search`/`re.sub` to the corresponding segment (with fallback to full text if section not found). | **Done** |
-| 4.2 | **Replace-one vs replace-all:** Add an optional flag or suggestion field (e.g. `apply_to: "first" | "all"`) and implement “replace all” by iterating over matches and replacing in reverse order (to preserve indices). | Pending |
-| 4.3 | **Anchors (optional):** If AI or frontend can provide a short context string (e.g. previous line or first 30 chars of block), use it to disambiguate which occurrence to replace when there are multiple matches. | Pending |
+| 4.2 | **Replace-one vs replace-all:** (apply_to "first" \| "all") Add an optional flag or suggestion field (e.g. `apply_to: "first" | "all"`) and implement “replace all” by iterating over matches and replacing in reverse order (to preserve indices). | **Done** |
+| 4.3 | **Anchors (optional):** If AI or frontend can provide a short context string (e.g. previous line or first 30 chars of block), use it to disambiguate which occurrence to replace when there are multiple matches. | **Done** (context_before) |
 
 **Deliverables:** Apply-changes behavior documented; section-aware replacement implemented and tested; optional replace-all and anchors as future-ready hooks.
 
@@ -205,12 +205,12 @@ preamble, _ = extract_sections_by_regex(text)
 
 ### Phase 5: Testing and regression
 
-| Item | Description |
-|------|-------------|
-| 5.1 | **Fixtures:** Add fixtures: (1) two-page PDF-like text with section on page boundary, (2) duplicate “Experience” headers, (3) preamble with blank lines, (4) minimal DOCX-style text (tables, multi-block). |
-| 5.2 | **Tests:** Preamble blanks, duplicate sections, PDF page separator, AI key normalization, section-aware apply (with a mock sectioned resume). |
-| 5.3 | **Performance:** Keep or add a test that regex section extraction stays under a threshold (e.g. &lt; 100 ms for ~4-page text) as per NFR1. |
-| 5.4 | **Documentation:** Update PARSER_DESIGN.md with pipeline diagram and config points; add a short “Adding a new section pattern” and “Adding a new format” to README or docs. |
+| Item | Description | Status |
+|------|-------------|--------|
+| 5.1 | **Fixtures:** Add fixtures: (1) two-page PDF-like text with section on page boundary, (2) duplicate “Experience” headers, (3) preamble with blank lines, (4) minimal DOCX-style text (tables, multi-block). | **Done** |
+| 5.2 | **Tests:** Preamble blanks, duplicate sections, PDF page separator, AI key normalization, section-aware apply (with a mock sectioned resume). | **Done** |
+| 5.3 | **Performance:** Keep or add a test that regex section extraction stays under a threshold (e.g. &lt; 100 ms for ~4-page text) as per NFR1. | **Done** |
+| 5.4 | **Documentation:** Update PARSER_DESIGN.md with pipeline diagram and config points; add a short “Adding a new section pattern” and “Adding a new format” to README or docs. | **Done** |
 
 ---
 

@@ -1,0 +1,28 @@
+Jane Doe
+San Francisco, CA · jane@email.com · (555) 123-4567
+
+Professional Summary
+Results-driven engineer with 5+ years of experience.
+
+Experience
+Senior Engineer, Tech Corp | 2020 – Present
+- Led migration to microservices.
+- Mentored team of 4.
+
+Engineer, StartupXYZ | 2017 – 2019
+- Built REST APIs.
+- Improved test coverage.
+
+Education
+BS Computer Science, University of California | 2017
+
+Skills
+Python, JavaScript, AWS, PostgreSQL
+
+---
+(PAGE 2 - section header at top of page)
+Certifications
+AWS Certified Solutions Architect (2021)
+
+Projects
+Internal dashboard for ops team.

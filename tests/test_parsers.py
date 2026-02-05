@@ -2,6 +2,7 @@
 Tests for resume parser: cleaning, section regex extraction, and full-text build.
 """
 import os
+import time
 import pytest
 
 from app.utils.parsers import (
@@ -285,6 +286,33 @@ def test_sample_minimal_no_headers():
     assert "Alex Smith" in parsed.full_text
     assert "Data Scientist" in parsed.full_text
     assert "Python" in parsed.full_text
+
+
+def test_sample_two_page():
+    """Two-page style fixture: section (Certifications) at page boundary is detected."""
+    path = _fixture_path("sample_two_page.txt")
+    if not os.path.exists(path):
+        pytest.skip("Fixture file not found")
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+    parsed = parse_resume_text_to_structure(text)
+    assert "Jane Doe" in parsed.full_text
+    assert "experience" in parsed.sections
+    assert "certifications" in parsed.sections
+    assert "AWS Certified" in parsed.full_text
+
+
+def test_sample_docx_style():
+    """DOCX-style fixture: table-like lines (|) are preserved in content."""
+    path = _fixture_path("sample_docx_style.txt")
+    if not os.path.exists(path):
+        pytest.skip("Fixture file not found")
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+    parsed = parse_resume_text_to_structure(text)
+    assert "Alex Chen" in parsed.full_text
+    assert "experience" in parsed.sections
+    assert "Tableau" in parsed.full_text or "SQL" in parsed.full_text
 
 
 # ---- Section patterns config (Phase 3) ----
@@ -589,3 +617,19 @@ def test_pipeline_config_uses_custom_cleaner():
     content = text.encode("utf-8")
     parsed = run_pipeline(content, "text/plain", config)
     assert "[CLEANED]" in parsed.full_text
+
+
+# ---- Phase 5: Performance (NFR1) ----
+
+def test_section_extraction_performance():
+    """Regex section extraction completes in < 100 ms for ~4-page text (NFR1)."""
+    # Build ~4 pages of text (mix of preamble, sections, bullets); ~2000 chars per page
+    block = "Line one with some content here.\n- Bullet A.\n- Bullet B.\n\n"
+    page = block * 35  # ~1 page
+    long_text = "Name\nEmail\n\nProfessional Summary\nShort summary.\n\nExperience\n" + (page * 4)
+    assert len(long_text) >= 8000, f"Expected >= 8000 chars, got {len(long_text)}"
+    start = time.perf_counter()
+    cleaned = clean_resume_text(long_text)
+    preamble, sections = extract_sections_by_regex(cleaned)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 0.15, f"Section extraction took {elapsed:.3f}s (expected < 0.15s for ~4 pages)"

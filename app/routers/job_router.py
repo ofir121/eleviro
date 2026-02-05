@@ -306,31 +306,33 @@ def _section_name_matches(suggestion_section: str, header_name: str) -> bool:
     return a == b or a in b or b in a
 
 
+def _normalize_whitespace(s: str) -> str:
+    """Collapse whitespace for anchor/context comparison."""
+    return " ".join((s or "").split())
+
+
 def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
     """
     Apply a list of suggestions (dict or Pydantic) to the resume text.
 
     Behavior:
-    - Each suggestion replaces at most one occurrence: the first match of
-      original_text (whitespace-normalized, case-insensitive) in the document.
-    - If the same phrase appears in multiple places (e.g. identical bullet in
-      two roles), only the first occurrence is replaced.
-    - Section-aware: when the resume contains ## Section headers and a suggestion
-      has a section field (e.g. "Experience"), the replacement is restricted to
-      that section's body, so the same phrase in another section is unchanged.
-    - Suggestions are applied in reverse order of their first match position
-      to avoid shifting indices. Empty suggested_text is treated as deletion.
+    - Section-aware: when the resume has ## Section headers and a suggestion has
+      section, replacement is restricted to that section (fallback: full text).
+    - apply_to "first" (default): replace one occurrence; "all": replace every match.
+    - context_before: optional anchor; only matches preceded by this context are replaced.
+    - Replacements are applied in reverse order of position to preserve indices.
+    - Empty suggested_text is treated as deletion.
     """
     modified_text = original_text
     md_sections = _parse_markdown_sections(original_text)
-
-    # Build (start, end, new_val) for each suggestion so we can apply by position
     replacements = []
 
     for s in suggestions:
         orig = s.get("original_text") if isinstance(s, dict) else s.original_text
         new_val = s.get("suggested_text") if isinstance(s, dict) else s.suggested_text
         section_hint = s.get("section") if isinstance(s, dict) else getattr(s, "section", None)
+        apply_to = s.get("apply_to", "first") if isinstance(s, dict) else getattr(s, "apply_to", "first")
+        context_before = s.get("context_before") if isinstance(s, dict) else getattr(s, "context_before", None)
         if not orig:
             continue
 
@@ -347,13 +349,20 @@ def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
                     section_start_offset = start
                     break
 
-        match = re.search(pattern, search_text, re.IGNORECASE)
-        if match:
+        anchor_norm = _normalize_whitespace(context_before) if context_before else None
+        matches = list(re.finditer(pattern, search_text, re.IGNORECASE))
+        if anchor_norm:
+            matches = [
+                m for m in matches
+                if anchor_norm in _normalize_whitespace(search_text[max(0, m.start() - 200) : m.start()])
+            ]
+        if apply_to == "first" and matches:
+            matches = matches[:1]
+        for match in matches:
             global_start = section_start_offset + match.start()
             global_end = section_start_offset + match.end()
             replacements.append((global_start, global_end, new_val or ""))
 
-    # Apply in reverse order of position so indices stay valid
     replacements.sort(key=lambda x: x[0], reverse=True)
     for start, end, new_val in replacements:
         modified_text = modified_text[:start] + new_val + modified_text[end:]

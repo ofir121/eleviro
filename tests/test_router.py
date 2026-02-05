@@ -85,6 +85,42 @@ Led the team to success in previous roles.
     assert "Led the team to success in previous roles" in result
 
 
+def test_apply_suggestions_replace_all():
+    """With apply_to='all', every occurrence of the phrase is replaced."""
+    original = "- Led the team.\n- Other.\n- Led the team."
+    suggestion = ResumeSuggestion(
+        id=1,
+        original_text="Led the team",
+        suggested_text="Led the team to deliver",
+        reason="Stronger",
+        section="Experience",
+        priority="high",
+        apply_to="all",
+    )
+    result = apply_suggestions_to_text(original, [suggestion])
+    assert result.count("Led the team to deliver") == 2
+    assert "Led the team." not in result  # no unreplaced occurrence
+
+
+def test_apply_suggestions_context_before_anchor():
+    """With context_before, only the match preceded by that context is replaced."""
+    original = "- First bullet: improve this.\n- Second bullet: improve this."
+    # Target only the second "improve this" (preceded by "Second bullet")
+    suggestion = ResumeSuggestion(
+        id=1,
+        original_text="improve this",
+        suggested_text="improved this",
+        reason="Clarity",
+        section="Experience",
+        priority="medium",
+        apply_to="first",
+        context_before="Second bullet",
+    )
+    result = apply_suggestions_to_text(original, [suggestion])
+    assert "- First bullet: improve this." in result
+    assert "Second bullet: improved this." in result
+
+
 def test_candidate_phone_rejects_date_range_and_uses_parsed_fallback():
     """
     When AI returns a date range as phone (e.g. 'July 2024 - Present'), we reject it

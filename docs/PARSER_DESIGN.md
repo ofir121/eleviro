@@ -45,6 +45,8 @@ Upload (PDF/DOCX)
    full_text: str  →  format_resume / extract_candidate_info / adapt_resume
 ```
 
+**Pipeline and config (Phase 2–3):** `run_pipeline(content, mime_type, config)` runs extract → clean → section extract → contact merge → build. Section patterns live in `app.config.section_patterns`; new formats can be added by registering an extractor in `PipelineConfig.extractors`. See README “Adding a new section pattern” and “Adding a new format”.
+
 ## 1. Text Extraction
 
 ### PDF
@@ -117,7 +119,8 @@ Subsections (e.g. “Technical” vs “Languages” under Skills) can be reques
 ## 5. Configuration
 
 - **use_ai_sections**: bool (default False) – whether to call AI to fix or refine sections/subsections.
-- **canonical_section_order**: list of canonical names – used when rebuilding full text and for any structured output.
+- **Section patterns:** `app.config.section_patterns` — `CANONICAL_SECTION_ORDER`, `SECTION_HEADER_VARIANTS`; compiled via `build_section_patterns()`.
+- **Pipeline:** `PipelineConfig` in `parsers.py` — extractors (by mime_type), cleaner, section_extractor, canonical_section_order. Default: `DEFAULT_PIPELINE_CONFIG`.
 
 ## 6. Testing Strategy
 

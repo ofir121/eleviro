@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 class ResumeSuggestion(BaseModel):
     """Individual resume change suggestion"""
@@ -9,6 +9,10 @@ class ResumeSuggestion(BaseModel):
     suggested_text: str
     reason: str
     priority: Literal["high", "medium", "low"]
+    # Phase 4.2: "first" = replace one occurrence (default), "all" = replace every match
+    apply_to: Literal["first", "all"] = "first"
+    # Phase 4.3: optional context string before the match (e.g. previous line) to disambiguate
+    context_before: Optional[str] = None
 
 class SuggestionResponse(BaseModel):
     """Response containing all suggestions"""
