@@ -21,6 +21,9 @@ from app.utils.parsers import (
     _is_section_header,
     RESUME_SECTION_PATTERNS,
     CANONICAL_SECTION_ORDER,
+    PipelineConfig,
+    run_pipeline,
+    DEFAULT_PIPELINE_CONFIG,
 )
 
 
@@ -495,3 +498,48 @@ Engineer at Acme 2020-present.
     assert "alex" in merged.lower() or "smith" in merged.lower()
     assert "555" in merged or "alex@example.com" in merged
     assert "linkedin" in merged.lower() or "example.com" in merged
+
+
+# ---- Pipeline (Phase 2) ----
+
+def test_run_pipeline_plain_text_matches_parse_resume_text_to_structure():
+    """run_pipeline with text/plain produces same result as parse_resume_text_to_structure."""
+    text = """Jane Doe
+jane@email.com
+
+Summary
+Short bio.
+
+Experience
+Engineer at Acme.
+"""
+    content = text.encode("utf-8")
+    parsed_pipeline = run_pipeline(content, "text/plain", DEFAULT_PIPELINE_CONFIG)
+    parsed_direct = parse_resume_text_to_structure(text)
+    assert parsed_pipeline.full_text.strip() == parsed_direct.full_text.strip()
+    assert parsed_pipeline.preamble.strip() == parsed_direct.preamble.strip()
+    assert parsed_pipeline.sections == parsed_direct.sections
+
+
+def test_run_pipeline_unknown_mime_falls_back_to_plain():
+    """Unknown mime_type falls back to plain decode."""
+    text = "Just some text"
+    content = text.encode("utf-8")
+    parsed = run_pipeline(content, "application/unknown", DEFAULT_PIPELINE_CONFIG)
+    assert "Just some text" in parsed.full_text
+
+
+def test_pipeline_config_uses_custom_cleaner():
+    """Custom config cleaner is used when provided."""
+    def suffix_cleaner(t: str) -> str:
+        return (t or "") + "\n[CLEANED]"
+    config = PipelineConfig(
+        extractors=DEFAULT_PIPELINE_CONFIG.extractors,
+        cleaner=suffix_cleaner,
+        section_extractor=extract_sections_by_regex,
+        canonical_section_order=CANONICAL_SECTION_ORDER,
+    )
+    text = "Name\n\nExperience\nJob."
+    content = text.encode("utf-8")
+    parsed = run_pipeline(content, "text/plain", config)
+    assert "[CLEANED]" in parsed.full_text

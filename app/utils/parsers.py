@@ -8,7 +8,7 @@ Resume parser: extract and structure text from PDF and DOCX resumes.
 import io
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -235,6 +235,25 @@ def build_full_text(preamble: str, sections: Dict[str, str], use_markdown_header
             parts.append("\n\n" + content.strip())
 
     return "\n".join(parts).strip() if parts else ""
+
+
+# ---------------------------------------------------------------------------
+# Pipeline config (Phase 2: modular pipeline)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PipelineConfig:
+    """
+    Configuration for the resume parse pipeline.
+    - extractors: mime_type -> (content: bytes) -> raw text
+    - cleaner: raw text -> cleaned text
+    - section_extractor: cleaned text -> (preamble, sections)
+    - canonical_section_order: used by build_full_text (optional override)
+    """
+    extractors: Dict[str, Callable[[bytes], str]]
+    cleaner: Callable[[str], str]
+    section_extractor: Callable[[str], Tuple[str, Dict[str, str]]]
+    canonical_section_order: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -693,13 +712,6 @@ def _extract_pdf_text_with_ocr_fallback(content: bytes) -> str:
     return full_pypdf
 
 
-async def parse_pdf(file: UploadFile) -> ParsedResume:
-    """Extract and clean text from a PDF resume; return structured ParsedResume (use .full_text for string)."""
-    content = await file.read()
-    raw = _extract_pdf_text_with_ocr_fallback(content)
-    return parse_resume_text_to_structure(raw)
-
-
 # ---------------------------------------------------------------------------
 # DOCX extraction
 # ---------------------------------------------------------------------------
@@ -771,13 +783,75 @@ def get_text_recursive(element):
     return "\n".join(t for t in text if t)
 
 
+# ---------------------------------------------------------------------------
+# Pipeline: extractor implementations and run_pipeline
+# ---------------------------------------------------------------------------
+
+def _extract_raw_pdf(content: bytes) -> str:
+    """Extract raw text from PDF bytes (layout + OCR fallback)."""
+    return _extract_pdf_text_with_ocr_fallback(content)
+
+
+def _extract_raw_docx(content: bytes) -> str:
+    """Extract raw text from DOCX bytes (body, tables, text boxes)."""
+    doc = Document(io.BytesIO(content))
+    return get_text_recursive(doc)
+
+
+def _extract_raw_plain(content: bytes) -> str:
+    """Decode bytes as UTF-8 (fallback for unknown or text/plain)."""
+    return content.decode("utf-8", errors="replace")
+
+
+# Default pipeline: PDF, DOCX, plain text extractors; shared cleaner and regex sections.
+DEFAULT_PIPELINE_CONFIG = PipelineConfig(
+    extractors={
+        "application/pdf": _extract_raw_pdf,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": _extract_raw_docx,
+        "text/plain": _extract_raw_plain,
+    },
+    cleaner=clean_resume_text,
+    section_extractor=extract_sections_by_regex,
+    canonical_section_order=CANONICAL_SECTION_ORDER,
+)
+
+
+def run_pipeline(content: bytes, mime_type: str, config: Optional[PipelineConfig] = None) -> ParsedResume:
+    """
+    Run the parse pipeline: extract -> clean -> sections -> contact merge -> build.
+    Uses config.extractors[mime_type] or falls back to text/plain decode.
+    """
+    cfg = config or DEFAULT_PIPELINE_CONFIG
+    extract = cfg.extractors.get(mime_type) or cfg.extractors.get("text/plain")
+    if extract is not None:
+        raw = extract(content)
+    else:
+        raw = _extract_raw_plain(content)
+
+    cleaned = cfg.cleaner(raw)
+    preamble, sections = cfg.section_extractor(cleaned)
+    if not sections and cleaned:
+        preamble = cleaned
+    contact = extract_contact_from_text(cleaned)
+    preamble = _merge_contact_into_preamble(preamble or "", contact)
+    full_text = build_full_text(preamble, sections)
+    return ParsedResume(full_text=full_text, preamble=preamble, sections=sections)
+
+
+async def parse_pdf(file: UploadFile) -> ParsedResume:
+    """Extract and clean text from a PDF resume; return structured ParsedResume (use .full_text for string)."""
+    content = await file.read()
+    return run_pipeline(content, "application/pdf", DEFAULT_PIPELINE_CONFIG)
+
+
 async def parse_docx(file: UploadFile) -> ParsedResume:
     """Extract and clean text from a DOCX resume; return structured ParsedResume (use .full_text for string)."""
     content = await file.read()
-    docx_file = io.BytesIO(content)
-    doc = Document(docx_file)
-    raw = get_text_recursive(doc)
-    return parse_resume_text_to_structure(raw)
+    return run_pipeline(
+        content,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        DEFAULT_PIPELINE_CONFIG,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -165,14 +165,14 @@ preamble, _ = extract_sections_by_regex(text)
 
 ### Phase 2: Modular pipeline (internal refactor)
 
-| Step | Description |
-|------|-------------|
-| 2.1 | Define a **pipeline config** (e.g. dataclass or dict): extractor name, cleaner name, section strategy (`regex` | `ai` | `hybrid`), canonical section order, optional AI threshold. |
-| 2.2 | Introduce **extractor interface**: `def extract(raw: bytes, mime_type: str) -> str`. Implement `PdfExtractor`, `DocxExtractor`, `PlainTextExtractor` (no-op read). |
-| 2.3 | Keep **cleaner** as a single function (or small interface) so it can be swapped later (e.g. language-specific). |
-| 2.4 | **Section extractor** interface: `def extract_sections(text: str) -> Tuple[str, Dict[str, str]]`. Current regex implementation is the default; optional wrapper that calls AI when `should_use_ai_sections` and merges. |
-| 2.5 | **Builder**: keep `build_full_text(preamble, sections, ...)` as the single place that produces `full_text` from structure. |
-| 2.6 | `parse_pdf` / `parse_docx` become thin wrappers: build pipeline from config, run extract → clean → sections → (optional AI) → build → contact merge, return `ParsedResume`. |
+| Step | Description | Status |
+|------|-------------|--------|
+| 2.1 | Define a **pipeline config** (e.g. dataclass or dict): extractor name, cleaner name, section strategy (`regex` \| `ai` \| `hybrid`), canonical section order, optional AI threshold. | **Done** |
+| 2.2 | Introduce **extractor interface**: `def extract(raw: bytes, mime_type: str) -> str`. Implement `PdfExtractor`, `DocxExtractor`, `PlainTextExtractor` (no-op read). | **Done** |
+| 2.3 | Keep **cleaner** as a single function (or small interface) so it can be swapped later (e.g. language-specific). | **Done** |
+| 2.4 | **Section extractor** interface: `def extract_sections(text: str) -> Tuple[str, Dict[str, str]]`. Current regex implementation is the default; optional wrapper that calls AI when `should_use_ai_sections` and merges. | **Done** (regex default; AI still in router) |
+| 2.5 | **Builder**: keep `build_full_text(preamble, sections, ...)` as the single place that produces `full_text` from structure. | **Done** |
+| 2.6 | `parse_pdf` / `parse_docx` become thin wrappers: build pipeline from config, run extract → clean → sections → (optional AI) → build → contact merge, return `ParsedResume`. | **Done** |
 
 **Deliverables:** Pipeline runs in-process with same behavior as today; no change to router or `ParsedResume` shape. New formats (e.g. RTF) can be added by adding an extractor and wiring it in config.
 
