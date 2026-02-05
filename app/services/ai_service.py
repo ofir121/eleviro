@@ -165,6 +165,78 @@ async def extract_candidate_info(resume_text: str, is_testing_mode: bool = False
     return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
 
+# Canonical section names used when building full text from AI section JSON.
+# Must match parser canonical order for consistent output.
+_AI_CANONICAL_ORDER = [
+    "preamble", "summary", "experience", "education", "skills",
+    "publications", "certifications", "projects", "awards", "other",
+]
+# Map common AI-returned key variants (normalized: lowercase, spaces -> underscores) to canonical.
+_AI_SECTION_KEY_ALIASES = {
+    "professional_summary": "summary",
+    "profile": "summary",
+    "objective": "summary",
+    "about_me": "summary",
+    "executive_summary": "summary",
+    "career_summary": "summary",
+    "work_experience": "experience",
+    "professional_experience": "experience",
+    "employment": "experience",
+    "employment_history": "experience",
+    "career_history": "experience",
+    "career": "experience",
+    "academic": "education",
+    "qualifications": "education",
+    "degrees": "education",
+    "academic_background": "education",
+    "technical_skills": "skills",
+    "core_competencies": "skills",
+    "expertise": "skills",
+    "technologies": "skills",
+    "key_skills": "skills",
+    "competencies": "skills",
+    "research": "publications",
+    "papers": "publications",
+    "selected_publications": "publications",
+    "licenses": "certifications",
+    "certificates": "certifications",
+    "professional_development": "certifications",
+    "key_projects": "projects",
+    "notable_projects": "projects",
+    "honors": "awards",
+    "achievements": "awards",
+    "recognition": "awards",
+    "additional": "other",
+    "activities": "other",
+    "volunteer": "other",
+    "interests": "other",
+    "languages": "other",
+    "references": "other",
+}
+
+
+def _normalize_ai_section_keys(data: dict) -> dict:
+    """
+    Normalize AI-returned JSON keys to canonical section names.
+    Merges content when the same canonical section appears under multiple keys
+    (e.g. "Experience" and "Professional Experience" -> "experience").
+    """
+    if not data or not isinstance(data, dict):
+        return {}
+    normalized = {}
+    for raw_key, value in data.items():
+        if not (value and str(value).strip()):
+            continue
+        key = str(raw_key).strip().lower().replace(" ", "_").replace("-", "_")
+        canonical = _AI_SECTION_KEY_ALIASES.get(key, key)
+        if canonical not in _AI_CANONICAL_ORDER:
+            canonical = key  # keep unknown keys as-is (with normalized form)
+        existing = normalized.get(canonical, "").strip()
+        new_val = str(value).strip()
+        normalized[canonical] = f"{existing}\n\n{new_val}".strip() if existing else new_val
+    return normalized
+
+
 async def parse_resume_sections_with_ai(
     resume_text: str,
     existing_sections: dict = None,
@@ -224,23 +296,27 @@ Return ONLY the JSON object, no markdown or explanation.
         return resume_text
     try:
         import json
-        data = json.loads(out.replace("```json", "").replace("```", "").strip())
-        # Build full text with ## headers
+        raw_data = json.loads(out.replace("```json", "").replace("```", "").strip())
+        data = _normalize_ai_section_keys(raw_data)
+        # Build full text with ## headers in canonical order
         parts = []
-        order = ["preamble", "summary", "experience", "education", "skills", "publications", "certifications", "projects", "awards", "other"]
-        for key in order:
-            val = data.get(key, "").strip()
+        seen = set()
+        for key in _AI_CANONICAL_ORDER:
+            val = (data.get(key) or "").strip()
             if not val:
                 continue
+            seen.add(key)
             if key == "preamble":
                 parts.append(val)
             else:
                 title = key.replace("_", " ").title()
                 parts.append(f"\n\n## {title}\n\n{val}")
         for k, v in data.items():
-            if k in order or not (v and str(v).strip()):
+            if k in seen or not (v and str(v).strip()):
                 continue
-            parts.append(f"\n\n## {k.replace('_', ' ').title()}\n\n{v.strip()}")
+            seen.add(k)
+            title = k.replace("_", " ").title()
+            parts.append(f"\n\n## {title}\n\n{v.strip()}")
         return "\n".join(parts).strip() if parts else resume_text
     except Exception:
         return resume_text

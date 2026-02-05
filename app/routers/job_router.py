@@ -278,48 +278,85 @@ async def download_document(
         headers={"Content-Disposition": f'attachment; filename="{filename}.docx"'}
     )
 
+def _parse_markdown_sections(text: str) -> list:
+    """
+    Split text by ## Markdown headers. Returns list of (section_name, start, end)
+    where section_name is the header line after ## (e.g. "Experience"), and
+    start/end are byte positions so text[start:end] is the full section including header.
+    """
+    sections = []
+    # Match ## Header at start of line (optional leading newline)
+    for m in re.finditer(r"^##\s+([^\n]+)", text, re.MULTILINE):
+        name = m.group(1).strip()
+        start = m.start()
+        sections.append((name, start, len(text)))
+    # Set end of each section to start of next
+    for i in range(len(sections) - 1):
+        name, start, _ = sections[i]
+        sections[i] = (name, start, sections[i + 1][1])
+    return sections
+
+
+def _section_name_matches(suggestion_section: str, header_name: str) -> bool:
+    """True if suggestion's section hint matches the markdown header (case-insensitive, normalize)."""
+    if not (suggestion_section and header_name):
+        return False
+    a = re.sub(r"\s+", " ", suggestion_section.strip().lower())
+    b = re.sub(r"\s+", " ", header_name.strip().lower())
+    return a == b or a in b or b in a
+
+
 def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
-    """Helper to apply a list of suggestions (dict or obj) to text."""
+    """
+    Apply a list of suggestions (dict or Pydantic) to the resume text.
+
+    Behavior:
+    - Each suggestion replaces at most one occurrence: the first match of
+      original_text (whitespace-normalized, case-insensitive) in the document.
+    - If the same phrase appears in multiple places (e.g. identical bullet in
+      two roles), only the first occurrence is replaced.
+    - Section-aware: when the resume contains ## Section headers and a suggestion
+      has a section field (e.g. "Experience"), the replacement is restricted to
+      that section's body, so the same phrase in another section is unchanged.
+    - Suggestions are applied in reverse order of their first match position
+      to avoid shifting indices. Empty suggested_text is treated as deletion.
+    """
     modified_text = original_text
-    
-    # Sort by position in text to avoid conflicts
-    # Since we don't have positions in the dict, we search
-    suggestions_with_pos = []
-    
+    md_sections = _parse_markdown_sections(original_text)
+
+    # Build (start, end, new_val) for each suggestion so we can apply by position
+    replacements = []
+
     for s in suggestions:
-        # data might be dict or Pydantic object
         orig = s.get("original_text") if isinstance(s, dict) else s.original_text
         new_val = s.get("suggested_text") if isinstance(s, dict) else s.suggested_text
-        
-        if not orig: continue
+        section_hint = s.get("section") if isinstance(s, dict) else getattr(s, "section", None)
+        if not orig:
+            continue
 
-        # ROBUST STRATEGY: Split by whitespace, escape parts, join with \s+
-        # This ensures that any sequence of whitespace in the suggestion matches
-        # any sequence of whitespace (newline, space, tab) in the resume.
-        parts = re.split(r'\s+', orig.strip())
+        parts = re.split(r"\s+", orig.strip())
         parts = [re.escape(p) for p in parts if p]
-        pattern = r'\s+'.join(parts)
-        
-        match = re.search(pattern, modified_text, re.IGNORECASE)
-        if match:
-            suggestions_with_pos.append((match.start(), pattern, new_val))
+        pattern = r"\s+".join(parts)
 
-    # Sort descending
-    suggestions_with_pos.sort(key=lambda x: x[0], reverse=True)
-    
-    for _, pattern, new_val in suggestions_with_pos:
-        if not new_val.strip():
-             # Deletion
-             # Try to remove the full line bullet if possible
-             full_line_pattern = r'^\s*[-*]\s*' + pattern + r'\s*$'
-             res, count = re.subn(full_line_pattern, '', modified_text, count=1, flags=re.IGNORECASE | re.MULTILINE)
-             if count == 0:
-                 modified_text = re.sub(pattern, '', modified_text, count=1, flags=re.IGNORECASE)
-             else:
-                 modified_text = res
-        else:
-            modified_text = re.sub(pattern, new_val, modified_text, count=1, flags=re.IGNORECASE)
-            
+        search_text = original_text
+        section_start_offset = 0
+        if section_hint and md_sections:
+            for name, start, end in md_sections:
+                if _section_name_matches(section_hint, name):
+                    search_text = original_text[start:end]
+                    section_start_offset = start
+                    break
+
+        match = re.search(pattern, search_text, re.IGNORECASE)
+        if match:
+            global_start = section_start_offset + match.start()
+            global_end = section_start_offset + match.end()
+            replacements.append((global_start, global_end, new_val or ""))
+
+    # Apply in reverse order of position so indices stay valid
+    replacements.sort(key=lambda x: x[0], reverse=True)
+    for start, end, new_val in replacements:
+        modified_text = modified_text[:start] + new_val + modified_text[end:]
     return modified_text
 
 @router.post("/apply-changes")

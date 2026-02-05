@@ -36,6 +36,55 @@ def test_apply_suggestions_multiple():
     result = apply_suggestions_to_text(original, [s1, s2])
     assert result == "1. Two. 3."
 
+
+def test_apply_suggestions_first_match_only():
+    """
+    When the same phrase appears twice, only the first occurrence is replaced
+    (documented behavior: one replacement per suggestion).
+    """
+    original = "- Led the team to success.\n- Did other work.\n- Led the team to success."
+    suggestion = ResumeSuggestion(
+        id=1,
+        original_text="Led the team to success",
+        suggested_text="Led the team to deliver on time",
+        reason="Stronger",
+        section="Experience",
+        priority="high",
+    )
+    result = apply_suggestions_to_text(original, [suggestion])
+    assert "Led the team to deliver on time" in result
+    assert result.count("Led the team to deliver on time") == 1
+    assert result.count("Led the team to success") == 1
+
+
+def test_apply_suggestions_section_aware():
+    """
+    When the resume has ## Section headers and a suggestion has section,
+    replacement is restricted to that section so the same phrase elsewhere is unchanged.
+    """
+    original = """# Jane Doe
+
+## Professional Summary
+Led the team to success in previous roles.
+
+## Experience
+- Led the team to success at Acme.
+- Other bullet.
+"""
+    suggestion = ResumeSuggestion(
+        id=1,
+        original_text="Led the team to success",
+        suggested_text="Led the team to deliver on time",
+        reason="Stronger",
+        section="Experience",
+        priority="high",
+    )
+    result = apply_suggestions_to_text(original, [suggestion])
+    # Replaced only in Experience
+    assert "Led the team to deliver on time at Acme" in result
+    assert "Led the team to success in previous roles" in result
+
+
 def test_candidate_phone_rejects_date_range_and_uses_parsed_fallback():
     """
     When AI returns a date range as phone (e.g. 'July 2024 - Present'), we reject it

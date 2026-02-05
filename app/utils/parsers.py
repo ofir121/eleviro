@@ -175,7 +175,10 @@ def extract_sections_by_regex(text: str) -> Tuple[str, Dict[str, str]]:
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            if current_content is not None:
+            # Preserve blank lines: in preamble keep paragraph breaks; in section keep in content
+            if current_section is None:
+                preamble_parts.append("")
+            else:
                 current_content.append("")
             continue
 
@@ -547,7 +550,8 @@ def _extract_pdf_text_from_reader(reader: PdfReader) -> Tuple[str, List[str]]:
         except (TypeError, ValueError, KeyError):
             t = page.extract_text()
         text_parts.append((t or "").strip())
-    full = "\n".join(text_parts)
+    # Use double newline between pages so section boundaries at page breaks are preserved
+    full = "\n\n".join(text_parts)
     return full, text_parts
 
 

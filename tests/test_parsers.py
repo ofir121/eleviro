@@ -151,6 +151,45 @@ AWS Certified
     assert "certifications" in sections and "AWS" in sections["certifications"]
 
 
+def test_extract_sections_by_regex_preserves_preamble_blank_lines():
+    """Blank lines in preamble (before first section) should be preserved."""
+    text = """Jane Doe
+
+jane@email.com
+
+Professional Summary
+Short bio.
+"""
+    preamble, sections = extract_sections_by_regex(text)
+    assert "Jane Doe" in preamble
+    assert "jane@email.com" in preamble
+    assert "\n\n" in preamble
+    assert "summary" in sections
+    assert "Short bio" in sections["summary"]
+
+
+def test_extract_sections_by_regex_duplicate_section_headers_merged():
+    """When the same section header appears twice, both blocks should be in that section."""
+    text = """Name
+Contact
+
+Experience
+First job 2020-2022.
+
+Experience
+Second job 2022-present.
+
+Education
+BS CS.
+"""
+    preamble, sections = extract_sections_by_regex(text)
+    assert "experience" in sections
+    assert "First job" in sections["experience"]
+    assert "Second job" in sections["experience"]
+    assert "education" in sections
+    assert "BS CS" in sections["education"]
+
+
 # ---- Build full text ----
 
 def test_build_full_text_order_and_headers():
