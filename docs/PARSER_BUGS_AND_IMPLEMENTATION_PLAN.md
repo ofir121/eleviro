@@ -180,12 +180,12 @@ preamble, _ = extract_sections_by_regex(text)
 
 ### Phase 3: Adaptive behavior and configuration
 
-| Step | Description |
-|------|-------------|
-| 3.1 | **Section patterns config:** Move `RESUME_SECTION_PATTERNS` and `CANONICAL_SECTION_ORDER` to a config file or module (e.g. `app/config/section_patterns.py`) with a simple format (canonical name → list of regex strings). Load at startup or first use. |
-| 3.2 | **Validation tiers:** Replace single `EXPECTED_SECTIONS` with e.g. `REQUIRED_SECTIONS` (at least one of experience/education) and `COMMON_SECTIONS` (skills, etc.). Add `ResumeType` or similar if we want student vs professional rules later. |
-| 3.3 | **AI key normalization:** Centralize “AI section key → canonical” mapping (including common model mistakes) and use it in `parse_resume_sections_with_ai` and any future AI section output. |
-| 3.4 | **Optional page breaks:** In PDF path, optionally append a token or double newline between pages and preserve it through clean/section steps so downstream can use it (e.g. “page 2” in UI). |
+| Step | Description | Status |
+|------|-------------|--------|
+| 3.1 | **Section patterns config:** Move `RESUME_SECTION_PATTERNS` and `CANONICAL_SECTION_ORDER` to a config file or module (e.g. `app/config/section_patterns.py`) with a simple format (canonical name → list of regex strings). Load at startup or first use. | **Done** |
+| 3.2 | **Validation tiers:** Replace single `EXPECTED_SECTIONS` with e.g. `REQUIRED_SECTIONS` (at least one of experience/education) and `COMMON_SECTIONS` (skills, etc.). Add `ResumeType` or similar if we want student vs professional rules later. | **Done** |
+| 3.3 | **AI key normalization:** Centralize “AI section key → canonical” mapping (including common model mistakes) and use it in `parse_resume_sections_with_ai` and any future AI section output. | **Done** (Phase 1) |
+| 3.4 | **Optional page breaks:** In PDF path, optionally append a token or double newline between pages and preserve it through clean/section steps so downstream can use it (e.g. “page 2” in UI). | **Done** |
 
 **Deliverables:** Section patterns and validation rules configurable without editing core parser logic; AI section output robust to key naming.
 

@@ -33,35 +33,16 @@ except ImportError:
     pytesseract = None
 
 # ---------------------------------------------------------------------------
-# Section detection: canonical names and regex patterns (order for reassembly)
+# Section detection: canonical names and regex patterns (from config)
 # ---------------------------------------------------------------------------
 
-CANONICAL_SECTION_ORDER = [
-    "preamble",
-    "summary",
-    "experience",
-    "education",
-    "skills",
-    "publications",
-    "certifications",
-    "projects",
-    "awards",
-    "other",
-]
+from app.config.section_patterns import (
+    CANONICAL_SECTION_ORDER,
+    build_section_patterns,
+)
 
-# Patterns match entire line (with optional trailing colon/period). Case-insensitive.
-# Each tuple: (canonical_name, re.Pattern). Line must match pattern and be header-like (short).
-RESUME_SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
-    ("summary", re.compile(r"^\s*(?:Professional\s+Summary|Summary|Profile|Objective|About\s+Me|Executive\s+Summary|Career\s+Summary)\s*[.:]?\s*$", re.I)),
-    ("experience", re.compile(r"^\s*(?:(?:Work\s+)?Experience|Employment\s+History|Professional\s+Experience|Career\s+History|Employment)\s*[.:]?\s*$", re.I)),
-    ("education", re.compile(r"^\s*(?:Education|Academic|Qualifications?|Degrees?|Academic\s+Background)\s*[.:]?\s*$", re.I)),
-    ("skills", re.compile(r"^\s*(?:Technical\s+)?Skills|Core\s+Competencies|Expertise|Technologies|Key\s+Skills|Competencies\s*[.:]?\s*$", re.I)),
-    ("publications", re.compile(r"^\s*(?:Publications?|Research|Papers?|Selected\s+Publications?)\s*[.:]?\s*$", re.I)),
-    ("certifications", re.compile(r"^\s*(?:Certifications?|Licenses?|Certificates?|Professional\s+Development)\s*[.:]?\s*$", re.I)),
-    ("projects", re.compile(r"^\s*(?:Key\s+)?Projects?|Notable\s+Projects?\s*[.:]?\s*$", re.I)),
-    ("awards", re.compile(r"^\s*(?:Awards?|Honors?|Achievements?|Recognition)\s*[.:]?\s*$", re.I)),
-    ("other", re.compile(r"^\s*(?:Additional|Other|Activities|Volunteer|Interests?|Languages?|References?)\s*[.:]?\s*$", re.I)),
-]
+# Compiled patterns (loaded from app.config.section_patterns at import).
+RESUME_SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = build_section_patterns()
 
 # Max length for a line to be considered a section header (avoids "I have 10 years Experience in..." matching)
 SECTION_HEADER_MAX_LEN = 80
@@ -491,10 +472,15 @@ def should_use_ai_sections(parsed: ParsedResume) -> bool:
 # Section validation
 # ---------------------------------------------------------------------------
 
-# Sections we expect most resumes to have; missing these may indicate parsing issues or an incomplete resume.
-EXPECTED_SECTIONS = ("experience", "education", "skills")
-# Other common sections; missing is informational only.
+# Validation tiers (Phase 3): at least one of REQUIRED_SECTIONS must be present for valid resume.
+REQUIRED_SECTIONS = ("experience", "education")  # at least one required (student may have only education, etc.)
+# Common sections; missing is informational only (warnings, not invalid).
+COMMON_SECTIONS = ("skills",)
+# Optional sections; missing is informational only.
 OPTIONAL_SECTIONS = ("summary", "publications", "certifications", "projects", "awards", "other")
+
+# Backward compatibility: "expected" = required + common for warnings
+EXPECTED_SECTIONS = REQUIRED_SECTIONS + COMMON_SECTIONS
 
 
 @dataclass
@@ -510,8 +496,9 @@ class ResumeSectionValidation:
 
 def validate_resume_sections(parsed: ParsedResume) -> ResumeSectionValidation:
     """
-    Check which expected/optional sections are present in the parsed resume.
-    A section counts as found if it exists in parsed.sections and has non-empty content.
+    Check which required/optional sections are present in the parsed resume.
+    Valid = has preamble and at least one of REQUIRED_SECTIONS (experience or education).
+    COMMON_SECTIONS (e.g. skills) and OPTIONAL_SECTIONS missing only produce warnings.
     """
     sections_found: List[str] = []
     sections_missing: List[str] = []
@@ -522,6 +509,9 @@ def validate_resume_sections(parsed: ParsedResume) -> ResumeSectionValidation:
         if content and str(content).strip():
             sections_found.append(name)
 
+    # Required: at least one of (experience, education) must be present
+    required_missing = [n for n in REQUIRED_SECTIONS if n not in sections_found]
+    # Sections missing from required + common (for backward-compat warnings)
     for name in EXPECTED_SECTIONS:
         if name not in sections_found:
             sections_missing.append(name)
@@ -538,7 +528,8 @@ def validate_resume_sections(parsed: ParsedResume) -> ResumeSectionValidation:
     for name in sections_missing:
         warnings.append(f"Expected section not found: {name.replace('_', ' ').title()}.")
 
-    is_valid = len(sections_missing) == 0 and has_preamble
+    # Valid: has preamble and at least one required section (experience or education)
+    is_valid = len(required_missing) < len(REQUIRED_SECTIONS) and has_preamble
 
     return ResumeSectionValidation(
         sections_found=sections_found,
@@ -558,6 +549,8 @@ def validate_resume_sections(parsed: ParsedResume) -> ResumeSectionValidation:
 MIN_EXTRACTED_CHARS_FOR_SKIP_OCR = 80
 OCR_DPI = 200  # Higher DPI improves accuracy for small text (e.g. names in headers)
 OCR_FIRST_N_PAGES = 2  # Run OCR on the first N pages to catch names/headers in images
+# Separator between PDF pages (preserved through clean/section so downstream can detect page boundaries).
+PDF_PAGE_SEPARATOR = "\n\n"
 
 
 def _extract_pdf_text_from_reader(reader: PdfReader) -> Tuple[str, List[str]]:
@@ -569,8 +562,7 @@ def _extract_pdf_text_from_reader(reader: PdfReader) -> Tuple[str, List[str]]:
         except (TypeError, ValueError, KeyError):
             t = page.extract_text()
         text_parts.append((t or "").strip())
-    # Use double newline between pages so section boundaries at page breaks are preserved
-    full = "\n\n".join(text_parts)
+    full = PDF_PAGE_SEPARATOR.join(text_parts)
     return full, text_parts
 
 

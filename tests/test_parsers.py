@@ -287,6 +287,36 @@ def test_sample_minimal_no_headers():
     assert "Python" in parsed.full_text
 
 
+# ---- Section patterns config (Phase 3) ----
+
+def test_section_patterns_config_builds_matching_patterns():
+    """Patterns from app.config.section_patterns match expected headers."""
+    from app.config.section_patterns import build_section_patterns, CANONICAL_SECTION_ORDER
+
+    patterns = build_section_patterns()
+    assert len(patterns) >= 8
+    names = [p[0] for p in patterns]
+    assert "summary" in names
+    assert "experience" in names
+    assert "education" in names
+    assert "skills" in names
+    # Quick match check
+    for canonical, pat in patterns:
+        if canonical == "summary":
+            assert pat.match("Summary") and pat.match("Professional Summary")
+        if canonical == "experience":
+            assert pat.match("Experience") and pat.match("Work Experience")
+
+
+def test_section_patterns_canonical_order():
+    from app.config.section_patterns import get_canonical_section_order
+
+    order = get_canonical_section_order()
+    assert order[0] == "preamble"
+    assert "experience" in order
+    assert "education" in order
+
+
 # ---- Constants ----
 
 def test_canonical_order_includes_expected():
@@ -359,6 +389,7 @@ def test_validate_resume_sections_all_found():
 
 
 def test_validate_resume_sections_missing_expected():
+    # At least one of (experience, education) is required; experience present => valid
     parsed = ParsedResume(
         full_text="Full",
         preamble="Name",
@@ -366,7 +397,7 @@ def test_validate_resume_sections_missing_expected():
     )
     v = validate_resume_sections(parsed)
     assert v.has_preamble is True
-    assert v.is_valid is False
+    assert v.is_valid is True  # experience is present (at least one required)
     assert "experience" in v.sections_found
     assert "education" in v.sections_missing
     assert "skills" in v.sections_missing
@@ -395,6 +426,21 @@ def test_validate_resume_sections_no_preamble():
     assert v.has_preamble is False
     assert v.is_valid is False
     assert any("preamble" in w.lower() for w in v.warnings)
+
+
+def test_validate_resume_sections_no_required_section_invalid():
+    """When neither experience nor education is present, resume is invalid."""
+    parsed = ParsedResume(
+        full_text="Full",
+        preamble="Name",
+        sections={"skills": "Python, SQL"},
+    )
+    v = validate_resume_sections(parsed)
+    assert v.has_preamble is True
+    assert v.is_valid is False
+    assert "skills" in v.sections_found
+    assert "experience" in v.sections_missing
+    assert "education" in v.sections_missing
 
 
 # ---- _looks_like_name_or_header ----
