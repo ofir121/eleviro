@@ -140,6 +140,27 @@ button:active {
     color: var(--text-secondary);
 }
 
+.candidate-contact-bar {
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.candidate-contact-bar a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+.candidate-contact-bar a:hover {
+    text-decoration: underline;
+}
+.candidate-contact-bar .contact-sep {
+    color: var(--border-color);
+    margin: 0 0.35rem;
+}
+
 .hidden {
     display: none;
 }

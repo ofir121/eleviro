@@ -1,0 +1,26 @@
+Jane Doe
+San Francisco, CA · jane.doe@email.com · (555) 123-4567 · linkedin.com/in/janedoe
+
+Professional Summary
+Results-driven Software Engineer with 5+ years of experience building scalable web applications. Strong background in Python, JavaScript, and cloud infrastructure.
+
+Experience
+Senior Software Engineer, Tech Corp Inc. | San Francisco, CA | Jan 2020 – Present
+- Led migration of legacy monolith to microservices, reducing deployment time by 40%.
+- Architected real-time analytics pipeline serving 2M+ events per day.
+- Mentored team of 4 junior engineers and established code review practices.
+
+Software Engineer, StartupXYZ | Remote | Jun 2017 – Dec 2019
+- Developed REST APIs and integrated third-party payment systems.
+- Improved test coverage from 60% to 90% and reduced production incidents.
+
+Education
+Bachelor of Science in Computer Science, University of California | 2013 – 2017
+- Dean's List, GPA 3.8
+
+Skills
+Technical: Python, JavaScript, React, Node.js, AWS, PostgreSQL, Docker
+Tools: Git, Jenkins, Terraform
+
+Certifications
+AWS Certified Solutions Architect – Associate (2021)

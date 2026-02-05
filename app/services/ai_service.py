@@ -23,6 +23,39 @@ def clean_newlines(text: str) -> str:
     """Remove excessive consecutive newlines, keeping at most one blank line."""
     return re.sub(r'\n{3,}', '\n\n', text.strip())
 
+
+def _strip_placeholder_publications(md: str) -> str:
+    """
+    Remove a ## Publications section if it contains only placeholder content
+    (e.g. "Title of Publication", "Title of Publication 1", "Title of Publication, Name").
+    Real publications have real titles; these phrases indicate the model invented the section.
+    """
+    if not md or "## Publications" not in md:
+        return md
+    # Match ## Publications (optional ## or ###, then content until next ## or end)
+    pattern = r'\n##\s*Publications\s*\n(?:(?!##\s)[\s\S])*'
+    match = re.search(pattern, md, re.IGNORECASE)
+    if not match:
+        return md
+    section = match.group(0)
+    # Normalize for check: lowercase, strip
+    body = section.split("\n", 1)[-1] if "\n" in section else ""
+    body_lower = body.lower().strip()
+    placeholder_phrases = [
+        "title of publication",
+        "title of publication 1",
+        "title of publication 2",
+    ]
+    is_placeholder = any(p in body_lower for p in placeholder_phrases) or re.search(
+        r"title\s+of\s+publication\s*\d*", body_lower
+    )
+    if not is_placeholder:
+        return md
+    # Remove the entire ## Publications block (section + content until next ## or end)
+    end_pattern = r'\n##\s*Publications\s*\n[\s\S]*?(?=\n##\s|\Z)'
+    out = re.sub(end_pattern, "\n", md, flags=re.IGNORECASE)
+    return clean_newlines(out.strip())
+
 async def get_completion(prompt: str, model: str = writing_model, **kwargs):
     if not client:
         return "Error: OPENAI_API_KEY not found. Please set it in the .env file."
@@ -131,6 +164,87 @@ async def extract_candidate_info(resume_text: str, is_testing_mode: bool = False
     """
     return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
+
+async def parse_resume_sections_with_ai(
+    resume_text: str,
+    existing_sections: dict = None,
+    is_testing_mode: bool = False,
+) -> str:
+    """
+    Use AI to extract or refine resume sections (and subsections) from raw or partially parsed text.
+    - If existing_sections is None or empty: split the full resume into canonical sections.
+    - If existing_sections is provided: refine assignment of content to sections and optionally
+      identify subsections (e.g. Technical Skills vs Languages under Skills).
+    Returns a single full-text string with clear section boundaries (## Section Name), suitable
+    for passing to format_resume / adapt_resume. Does not invent or remove content.
+    """
+    model = TESTING_MODEL if is_testing_mode else writing_model
+    has_existing = existing_sections and len(existing_sections) > 0
+    # Truncate to avoid token limits while keeping structure
+    text_sample = resume_text[:12000] if len(resume_text) > 12000 else resume_text
+
+    if has_existing:
+        sections_json = "\n".join(f"## {k}\n{v}" for k, v in existing_sections.items())
+        prompt = f"""
+You are a resume parser. Below is resume text and a current section split. Your task is to refine the section assignment only.
+
+# Constraints
+- Do NOT add, remove, or change any factual content. Only (re)assign blocks to the correct section. Do not invent content (e.g. no placeholder publications, no "U.S. Permanent Residence" unless in the resume).
+- If some content is clearly in the wrong section, assign it to the correct one (e.g. Summary, Experience, Education, Skills, Publications, Certifications, Projects, Awards, Other).
+- If a section has clear subsections (e.g. under Skills: "Technical" vs "Languages"), you may label them as "Skills - Technical" and "Skills - Languages" but merge the content under one "Skills" block in the output.
+- Return a valid JSON object where each key is a section name (Summary, Experience, Education, Skills, Publications, Certifications, Projects, Awards, Other) and each value is the full text for that section. Include "preamble" for name/contact at the top. Omit sections that have no content in the resume.
+- Use only these section names: preamble, summary, experience, education, skills, publications, certifications, projects, awards, other.
+
+# Current sections (for reference)
+{sections_json}
+
+# Full resume text
+{text_sample}
+
+Return ONLY the JSON object, no markdown or explanation.
+"""
+    else:
+        prompt = f"""
+You are a resume parser. Split the following resume text into logical sections. Do NOT add, remove, or change any content; only assign each part to the correct section.
+
+# Section names to use (lowercase)
+preamble (name, contact, title), summary, experience, education, skills, publications, certifications, projects, awards, other.
+
+# Output
+Return a valid JSON object. Keys: preamble, summary, experience, education, skills, publications, certifications, projects, awards, other. Omit keys for empty sections. Each value is the exact text for that section—do not invent or add any content (e.g. do not add a publications section with placeholder entries like "Title of Publication 1" if the resume has no publications). Do not add work authorization or "U.S. Permanent Residence" to the preamble unless it appears in the resume.
+
+# Resume text
+{text_sample}
+
+Return ONLY the JSON object, no markdown or explanation.
+"""
+
+    out = await get_completion(prompt, model=model, response_format={"type": "json_object"})
+    if not out:
+        return resume_text
+    try:
+        import json
+        data = json.loads(out.replace("```json", "").replace("```", "").strip())
+        # Build full text with ## headers
+        parts = []
+        order = ["preamble", "summary", "experience", "education", "skills", "publications", "certifications", "projects", "awards", "other"]
+        for key in order:
+            val = data.get(key, "").strip()
+            if not val:
+                continue
+            if key == "preamble":
+                parts.append(val)
+            else:
+                title = key.replace("_", " ").title()
+                parts.append(f"\n\n## {title}\n\n{val}")
+        for k, v in data.items():
+            if k in order or not (v and str(v).strip()):
+                continue
+            parts.append(f"\n\n## {k.replace('_', ' ').title()}\n\n{v.strip()}")
+        return "\n".join(parts).strip() if parts else resume_text
+    except Exception:
+        return resume_text
+
 async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: bool = False) -> str:
     model = TESTING_MODEL if is_testing_mode else writing_model
     prompt = f"""
@@ -157,8 +271,9 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
 
     # Formatting Rules
     1. **Name**: Use # for the Name. Bold and center it.
-    2. **Contact Info**: Place contact details (location, phone, email, work authorization) on a single line directly below the name, separated by · (middle dot). Only include if present in the original resume. If only the word "linkedin" appears on it's own remove the word linkedin from the contact info.
-       - Example: Baltimore, MD · XXX-XXX-XXXX · email@example.com · U.S. Permanent Residence
+    2. **Contact Info**: Place contact details (location, phone, email, portfolio/LinkedIn) on a single line directly below the name, separated by · (middle dot). Only include what is explicitly present in the original resume. If only the word "linkedin" appears on it's own remove the word linkedin from the contact info.
+       - CRITICAL: Do NOT add work authorization, visa status, citizenship, or "U.S. Permanent Residence" unless it is explicitly stated in the original resume.
+       - Example (only if present in resume): Baltimore, MD · XXX-XXX-XXXX · email@example.com
     3. **Section Headers**: Use ## for headers (Experience, Education, Skills). Bold them.
     4. **Experience Entries**:
        - Format: **Role**, Location | Date Range
@@ -179,14 +294,13 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
        - CRITICAL: Categories should be bolded and underlined (**Skills Category**).
        - CRITICAL: Should not contain sentences or paragraphs. Just a list of skills. Example: **Technical Skills**: [Python, JavaScript, React, Data Analysis]
 
-    # Structure
+    # Structure (ORDER IS MANDATORY—Professional Summary must be right after contact, never at the end)
     # [Candidate Name]
-    [Contact Info Placeholder]
+    [Contact Info]
     (if the word "linkedin" appears on it's own remove the word linkedin from the contact info)
 
-    Professional Summary Section: ONLY if the original resume has a summary, include the '## Professional Summary' header and a tailored 3-4 sentences paragraph here. Otherwise, omit this entirely.
-    ## Skills
-    (A compact list of relevant skills in the format **Skills Category**: [Skill 1, Skill 2, ...])
+    ## Professional Summary
+    (ONLY if the original resume has a summary—place this section HERE, directly under contact. Do not put it after Experience, Education, or Skills.)
 
     ## Experience
     (List relevant experience using the specified format)
@@ -194,9 +308,12 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
 
     ## Education
     (Brief education section)
+
+    ## Skills
+    (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
     
     ## Publications
-    (Brief publications section, omit if none)
+    (ONLY if the original resume explicitly lists real publications with real titles. If there are no publications, omit this section entirely. Do not add "Title of Publication" or similar placeholders.)
 
     # Input Data
     <resume>
@@ -207,7 +324,8 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
     {job_description}
     </job_description>
     """
-    return await get_completion(prompt, model=model)
+    result = await get_completion(prompt, model=model)
+    return _strip_placeholder_publications(clean_newlines(result))
 
 async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     model = TESTING_MODEL if is_testing_mode else writing_model
@@ -223,58 +341,58 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     - Keep the text exactly as is, just add formatting.
     - Output ONLY the markdown content.
     - CRITICAL: Do NOT add excessive blank lines. Use at most ONE blank line between sections.
-    - CRITICAL: Reorder sections to follow: Name → Professional Summary (if exists) → Skills → Experience → Education → Publications (if exists)
+    - CRITICAL: Section order MUST be: (1) Name and Contact (2) Professional Summary—immediately after contact if the resume has one—(3) Experience (4) Education (5) Skills (6) Publications only if the resume has real publications. Do NOT put Professional Summary at the end of the resume or after Skills.
     - CRITICAL: NEVER put bullet points (- or *) before any headline line. A headline is any line containing | (pipe), such as Role | Date or Degree | Date. Only content UNDER headlines should have bullet points.
     - CRITICAL: Include ALL content from the original resume. NEVER use "..." or ellipsis to skip content. Do NOT abbreviate or omit any entries.
 
     # Formatting Rules
     1. **Name**: Use # for the Name. Bold and center it.
-    2. **Contact Info**: Place contact details (location, phone, email, work authorization) on a single line directly below the name, separated by · (middle dot). Only include if present in the original resume.
-       - Example: Baltimore, MD · XXX-XXX-XXXX · email@example.com · U.S. Permanent Residence
+    2. **Contact Info**: Place contact details (location, phone, email, portfolio/LinkedIn) on a single line directly below the name, separated by · (middle dot). Only include what is explicitly present in the original resume.
+       - CRITICAL: Do NOT add work authorization, visa status, citizenship, or "U.S. Permanent Residence" unless it is explicitly stated in the original resume.
+       - Example (only if present in resume): Baltimore, MD · XXX-XXX-XXXX · email@example.com
     3. **Section Headers**: Use ## for headers. Bold them.
     4. **Experience Entries**:
        - Format: **Role**, Location | Date Range
        - Example: **Senior Software Engineer**, New York | Jan 2020 - Present
        - If Location is missing: **Role** | Date Range
        - IMPORTANT: Do NOT invent Role/Date if missing. Leave as normal text.
-       - IMPORTANT: Do NOT invent Role/Date if missing. Leave as normal text.
        - CRITICAL: Do NOT put a bullet point (neither - nor *) before the Role line.
        - WRONG: - **Senior Software Engineer**, New York | Jan 2020 - Present
        - RIGHT: **Senior Software Engineer**, New York | Jan 2020 - Present
-    4. **Education**:
+    5. **Education**:
        - Format: **Degree**, [School Name] | [Start Date - End Date]
        - CRITICAL: Do NOT put a bullet point (neither - nor *) before the Degree line.
        - WRONG: - **Bachelor of Science**, University of X | 2010 - 2014
        - RIGHT: **Bachelor of Science**, University of X | 2010 - 2014
-    5. **Skills**:
+    6. **Skills**:
        - Categories should be bolded and underlined (**Skills Category**).
        - FORMAT: The skills are listed in the format **Skills Category**: [Skill 1, Skill 2, ...]
-    6. **Publications**:
-       - CRITICAL: The publications section is optional. If present, it should be formatted as a list of bullet points.
-       - IMPORTANT: The name of the publication and the name of the CV individual should be bolded.
-    7. **Bullet Points in Experience**:
+    7. **Publications**:
+       - CRITICAL: Include a Publications section ONLY if the original resume explicitly lists publications. If the resume has no publications, omit this section entirely. Never invent or add placeholder publications (e.g. "Title of Publication 1").
+       - If present, format as a list of bullet points; bold the publication name and the candidate's name.
+    8. **Bullet Points in Experience**:
        - CRITICAL: Preserve ALL bullet points from the original resume.
        - Use - for bullet points.
        - Each experience entry should have its bullet points listed below the role line.
 
-    # Structure
+    # Structure (ORDER IS MANDATORY—put Professional Summary right after contact, never at the end)
     # [Candidate Name]
-    [Contact Info Placeholder]
+    [Contact Info]
 
     ## Professional Summary
-    (Include this section ONLY if the original resume has a summary)
-
-    ## Skills
-    (A compact list of relevant skills in the format **Skills Category**: [Skill 1, Skill 2, ...])
+    (ONLY if the original resume has a summary—place this section HERE, directly under contact. Do not put it after Experience, Education, or Skills.)
 
     ## Experience
-    (List relevant experience using the specified format)
+    (List experience using the specified format)
 
     ## Education
     (Brief education section)
+
+    ## Skills
+    (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
     
     ## Publications
-    (Brief publications section, omit if none)
+    (ONLY if the original resume explicitly lists real publications with real titles. If there are no publications, omit this section entirely. Do not add "Title of Publication" or similar placeholders.)
 
     # Input Data
     <resume>
@@ -282,10 +400,42 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     </resume>
     """
     result = await get_completion(prompt, model=model)
-    return clean_newlines(result)
+    cleaned = clean_newlines(result)
+    return _strip_placeholder_publications(cleaned)
 
-async def generate_cover_letter(resume_text: str, job_description: str, is_testing_mode: bool = False) -> str:
+def _format_contact_for_prompt(contact: dict) -> str:
+    """Build a single line of contact details for the cover letter prompt."""
+    if not contact:
+        return ""
+    parts = []
+    if contact.get("location"):
+        parts.append(str(contact["location"]).strip())
+    for p in contact.get("phones") or []:
+        parts.append(str(p).strip())
+    for e in contact.get("emails") or []:
+        parts.append(str(e).strip())
+    for u in contact.get("linkedin_urls") or []:
+        parts.append(str(u).strip())
+    for u in contact.get("portfolio_urls") or []:
+        parts.append(str(u).strip())
+    for u in contact.get("other_urls") or []:
+        parts.append(str(u).strip())
+    return " · ".join(parts) if parts else ""
+
+
+async def generate_cover_letter(
+    resume_text: str,
+    job_description: str,
+    is_testing_mode: bool = False,
+    contact: dict = None,
+) -> str:
     model = TESTING_MODEL if is_testing_mode else writing_model
+    contact_line = _format_contact_for_prompt(contact) if contact else ""
+    contact_instruction = (
+        f"\n    - **Use these exact contact details on the line below the candidate name:** {contact_line}\n"
+        if contact_line
+        else ""
+    )
     prompt = f"""
     # Role
     You are an expert Career Coach.
@@ -302,10 +452,8 @@ async def generate_cover_letter(resume_text: str, job_description: str, is_testi
     # Guidelines
     - Start with a header containing the candidate's name and contact details.
     - Format the Name as `# [Candidate Name]` (Centered by logic).
-    - Format the contact details on the next line, separated by · (middle dot).
-    - Example Header:
-      # John Doe
-      New York, NY · 555-555-5555 · email@example.com
+    - Format the contact details on the next line, separated by · (middle dot).{contact_instruction}
+    - If no contact details are provided above, extract them from the resume. Do NOT use placeholders like email@example.com; use the candidate's real email, phone, and location from the resume.
     - Express enthusiasm for the role.
     - Highlight key achievements from the resume that match the job requirements.
     - Explain why the candidate is a good fit.
@@ -387,8 +535,6 @@ async def suggest_resume_changes(resume_text: str, job_description: str, is_test
     {job_description}
     </job_description>
     """
-    return await get_completion(prompt, model=model, response_format={"type": "json_object"})
-
     return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
 
@@ -521,6 +667,7 @@ def _extract_bolding_suggestions(original_text: str, bolded_text: str) -> list:
     )
     
     suggestions = []
+    seen_suggestions = set() # Track seen (original, suggested) pairs
     
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == 'equal':
@@ -536,14 +683,17 @@ def _extract_bolding_suggestions(original_text: str, bolded_text: str) -> list:
                 if '**' in bold_text and orig_text != bold_text:
                     # Double check content equality to be safe
                     if clean_for_diff(bold_text) == orig_text.strip():
-                        suggestions.append({
-                            "id": 0,
-                            "section": "Keyword Optimization",
-                            "original_text": orig_text,
-                            "suggested_text": bold_text,
-                            "reason": "Highlighting key skills and metrics matching the job description.",
-                            "priority": "medium"
-                        })
+                        pair = (orig_text, bold_text)
+                        if pair not in seen_suggestions:
+                            seen_suggestions.add(pair)
+                            suggestions.append({
+                                "id": 0,
+                                "section": "Keyword Optimization",
+                                "original_text": orig_text,
+                                "suggested_text": bold_text,
+                                "reason": "Highlighting key skills and metrics matching the job description.",
+                                "priority": "medium"
+                            })
                         
         elif tag == 'replace':
             # Handle potential wrapping or multi-line bolding
@@ -570,14 +720,17 @@ def _extract_bolding_suggestions(original_text: str, bolded_text: str) -> list:
                  
                  # Only suggest if there is actual bolding and it changed
                  if '**' in suggested_block and original_block != suggested_block:
-                     suggestions.append({
-                        "id": 0,
-                        "section": "Keyword Optimization",
-                        "original_text": original_block,
-                        "suggested_text": suggested_block,
-                        "reason": "Highlighting key skills and metrics matching the job description.",
-                        "priority": "medium"
-                    })
+                     pair = (original_block, suggested_block)
+                     if pair not in seen_suggestions:
+                         seen_suggestions.add(pair)
+                         suggestions.append({
+                            "id": 0,
+                            "section": "Keyword Optimization",
+                            "original_text": original_block,
+                            "suggested_text": suggested_block,
+                            "reason": "Highlighting key skills and metrics matching the job description.",
+                            "priority": "medium"
+                        })
 
     if not suggestions:
         print(f"Debug: No bolding suggestions found. Stats: OrigLines={len(original_lines)}, BoldLines={len(bolded_lines)}")

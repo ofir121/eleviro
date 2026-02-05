@@ -53,9 +53,9 @@ def add_hyperlink(paragraph, text, url, is_bold=False):
 def process_text(paragraph, text, default_bold=False, default_color=None, font_size=None):
     """
     Process text for bold markers (**text**) and markdown links ([text](url)).
+    Handles links inside bold text correctly.
     """
     # Regex to find **bold** OR [link](url)
-    # This regex captures delimiters to keep them in the split list
     pattern = r'(\*\*.*?\*\*|\[.*?\]\(.*?\))'
     parts = re.split(pattern, text)
     
@@ -66,20 +66,30 @@ def process_text(paragraph, text, default_bold=False, default_color=None, font_s
         if part.startswith('**') and part.endswith('**'):
             # Bold text
             content = part[2:-2]
-            # Check if there is a link inside the bold text
-            link_match = re.match(r'\[(.*?)\]\((.*?)\)', content)
-            if link_match:
-                # Link inside bold
-                link_text = link_match.group(1)
-                link_url = link_match.group(2)
-                add_hyperlink(paragraph, link_text, link_url, is_bold=True)
-            else:
-                run = paragraph.add_run(content)
-                run.bold = True
-                if default_color:
-                    run.font.color.rgb = default_color
-                if font_size:
-                    run.font.size = font_size
+            
+            # Check for links INSIDE the bold text
+            # We use the same splitting logic but only looking for links
+            link_pattern = r'(\[.*?\]\(.*?\))'
+            inner_parts = re.split(link_pattern, content)
+            
+            for inner_part in inner_parts:
+                if not inner_part:
+                    continue
+                
+                link_match = re.match(r'\[(.*?)\]\((.*?)\)', inner_part)
+                if link_match:
+                    # Link inside bold
+                    link_text = link_match.group(1)
+                    link_url = link_match.group(2)
+                    add_hyperlink(paragraph, link_text, link_url, is_bold=True)
+                else:
+                    # Plain text inside bold
+                    run = paragraph.add_run(inner_part)
+                    run.bold = True
+                    if default_color:
+                        run.font.color.rgb = default_color
+                    if font_size:
+                        run.font.size = font_size
                     
         elif part.startswith('[') and part.endswith(')') and '](' in part:
             # Link
@@ -87,9 +97,10 @@ def process_text(paragraph, text, default_bold=False, default_color=None, font_s
             if link_match:
                 link_text = link_match.group(1)
                 link_url = link_match.group(2)
+                # Pass default_bold in case the whole paragraph implies bolding
                 add_hyperlink(paragraph, link_text, link_url, is_bold=default_bold)
             else:
-                # Fallback
+                # Fallback if regex matched but structure is weird
                 run = paragraph.add_run(part)
                 if default_bold: run.bold = True
                 if default_color: run.font.color.rgb = default_color
@@ -180,8 +191,12 @@ def create_docx(content: str) -> BytesIO:
         is_header = line.startswith(('# ', '## ', '### '))
         # Table detection: must contain pipe, not be a bullet, and we shouldn't be expecting contact info
         # (Contact info might use pipes as separators, so we treat it as text if waiting)
-        is_table_row = ('|' in line) and (not line.startswith(('- ', '* '))) and (not waiting_for_contact_info)
-        is_bullet = line.startswith(('- ', '* '))
+        is_table_row = ('|' in line) and (not line.startswith(('- ', '* ', '• '))) and (not waiting_for_contact_info)
+        is_bullet = line.startswith(('- ', '* ', '• '))
+        
+        # New check: Key-Value pair / Skills line starting with bold
+        # e.g. "**Skills:** Python, Java"
+        is_key_value = line.startswith('**') and ':' in line
 
         if is_header:
             flush_block()
@@ -351,13 +366,21 @@ def create_docx(content: str) -> BytesIO:
 
         elif is_bullet:
             # Check if we were already in a bullet block; if not, flush whatever was before
-            if current_block_type != 'bullet':
-                 flush_block()
+            # ALWAYS flush before a new bullet point to ensure they are separate items
+            flush_block()
             
             # Start/Continue bullet block
             current_block_type = 'bullet'
             current_block_lines.append(line[2:].strip())
             waiting_for_contact_info = False
+            
+        elif is_key_value:
+             # Logic to prevent merging of "Skills" or similar key-value pairs
+             flush_block() 
+             # Treat as a single line 'normal' block effectively, forcing a new paragraph
+             current_block_type = 'normal'
+             current_block_lines.append(line)
+             flush_block() # Flush immediately so next line starts new
 
         else:
             # Normal text or continuation of previous block

@@ -5,7 +5,7 @@
 ## 🚀 Key Features
 
 *   **Intelligent Job Analysis**: Scrapes job descriptions directly from URLs or accepts raw text to identify key skills and requirements.
-*   **Resume Parsing**: Supports uploading existing resumes in both **PDF** and **DOCX** formats.
+*   **Resume Parsing**: Supports uploading existing resumes in both **PDF** and **DOCX** formats. The parser uses regex-based section detection (Summary, Experience, Education, Skills, etc.) and optional AI to refine sections and subsections. **OCR** (Tesseract) is used automatically when PDF text extraction is poor (e.g. scanned PDFs or text in images, such as a candidate name in a header). See `docs/PARSER_REQUIREMENTS.md` and `docs/PARSER_DESIGN.md` for details.
 *   **AI-Powered Tailoring**: Uses advanced AI models (via OpenAI) to suggest specific optimizations for your Professional Summary and Experience bullet points, ensuring they align with the job description.
 *   **Automated Cover Letters**: Generates personalized, professional cover letters based on your experience and the job's context.
 *   **Professional Export**: Downloads your adapted resume as a cleanly formatted DOCX file, featuring:
@@ -25,7 +25,7 @@
 *   **AI Engine**: OpenAI API
 *   **Observability**: Langfuse
 *   **Search**: DuckDuckGo Search
-*   **Document Processing**: `python-docx`, `pypdf`, `BeautifulSoup4`
+*   **Document Processing**: `python-docx`, `pypdf`, `BeautifulSoup4`; optional OCR: `pymupdf`, `pytesseract`, `Pillow`
 
 ## 🏁 Getting Started
 
@@ -33,6 +33,7 @@
 
 *   Python 3.8+
 *   An OpenAI API Key
+*   **Optional (for OCR on scanned/image PDFs):** [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) installed and on your PATH (e.g. `brew install tesseract` on macOS, `apt-get install tesseract-ocr` on Debian/Ubuntu). If Tesseract is not installed, PDF parsing still works for normal text-based PDFs.
 
 ### Installation
 

@@ -1,0 +1,11 @@
+Alex Smith
+Anytown, ST · alex@example.com · (555) 123-4567
+
+I am a data scientist with experience in ML and Python.
+
+Data Scientist at Acme 2020-2023. Built models. Led team of 3.
+Before that intern at Beta Inc. 2019.
+
+MSc Computer Science, State University 2019. BSc 2017.
+
+Python, SQL, TensorFlow, PyTorch.

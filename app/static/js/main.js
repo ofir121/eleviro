@@ -14,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let companyName = 'Company';
     let roleTitle = 'Role';
     let candidateName = 'Candidate';
+    let candidateEmail = '';
+    let candidatePhone = '';
+    let candidateLocation = '';
+    let candidateLinkedin = '';
+    let candidatePortfolio = '';
     let currentJobDescription = ''; // Store for outreach generation
     let progressInterval;
     let cleanupTimeout;
@@ -584,6 +589,11 @@ document.addEventListener('DOMContentLoaded', () => {
             companyName = data.company_name || 'Company';
             roleTitle = data.role_title || 'Role';
             candidateName = data.candidate_name || 'Candidate';
+            candidateEmail = data.candidate_email || '';
+            candidatePhone = data.candidate_phone || '';
+            candidateLocation = data.candidate_location || '';
+            candidateLinkedin = data.candidate_linkedin || '';
+            candidatePortfolio = data.candidate_portfolio || '';
 
             // Use job description from backend (handles URL scraping properly)
             currentJobDescription = data.job_description || '';
@@ -591,6 +601,23 @@ document.addEventListener('DOMContentLoaded', () => {
             // Populate results with Markdown rendering (with null checks)
             document.getElementById('job-summary-content').innerHTML = data.job_summary ? marked.parse(data.job_summary) : '<p>No job summary available</p>';
             document.getElementById('company-summary-content').innerHTML = data.company_summary ? marked.parse(data.company_summary) : '<p>No company summary available</p>';
+
+            // Candidate contact bar (phone, email, location, LinkedIn, portfolio)
+            const contactBar = document.getElementById('candidate-contact-bar');
+            const contactParts = [];
+            if (candidateLocation) contactParts.push(`<span>${escapeHtml(candidateLocation)}</span>`);
+            if (candidatePhone) contactParts.push(`<span>${escapeHtml(candidatePhone)}</span>`);
+            if (candidateEmail) contactParts.push(`<a href="mailto:${escapeHtml(candidateEmail)}">${escapeHtml(candidateEmail)}</a>`);
+            if (candidateLinkedin) contactParts.push(`<a href="${escapeHtml(candidateLinkedin)}" target="_blank" rel="noopener">LinkedIn</a>`);
+            if (candidatePortfolio) contactParts.push(`<a href="${escapeHtml(candidatePortfolio)}" target="_blank" rel="noopener">Portfolio</a>`);
+            if (contactParts.length > 0) {
+                contactBar.innerHTML = contactParts.join(' <span class="contact-sep">·</span> ');
+                contactBar.classList.remove('hidden');
+            } else {
+                contactBar.innerHTML = '';
+                contactBar.classList.add('hidden');
+            }
+
             document.getElementById('cover-letter-content').innerHTML = data.cover_letter ? marked.parse(data.cover_letter) : '<p>No cover letter available</p>';
 
             // Render suggestions

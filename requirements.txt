@@ -6,6 +6,9 @@ python-dotenv
 python-multipart
 jinja2
 pypdf
+pymupdf
+pytesseract
+Pillow
 python-docx
 beautifulsoup4
 requests

@@ -1,15 +1,20 @@
 import pytest
 import asyncio
 import time
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import UploadFile
-from app.routers import job_router
 from app.services import ai_service
 
-# Mock imports in job_router to avoid actual dependencies
-import sys
-sys.modules['app.utils.parsers'] = MagicMock()
-from app.utils import parsers
+# ParsedResume-like object for resume_text path (multiple sections so AI is not required)
+def _mock_parsed_resume():
+    return MagicMock(
+        full_text="Resume Content",
+        preamble="Name Contact",
+        sections={"experience": "Job at Co.", "education": "BS CS."},
+    )
+
+def _mock_extracted_contact():
+    return MagicMock(phones=[], emails=[], location=None, linkedin_urls=[], portfolio_urls=[], other_urls=[])
 
 @pytest.mark.asyncio
 async def test_process_job_concurrency():
@@ -43,23 +48,36 @@ async def test_process_job_concurrency():
         return [{"original_text": "foo", "suggested_text": "bar"}]
     ai_service.suggest_bold_changes = AsyncMock(side_effect=bold_delay)
 
-    # Mock Parsers
-    parsers.scrape_url = MagicMock(return_value="Job Description")
-    parsers.parse_pdf = AsyncMock(return_value="Resume Text")
-
-    # Override the router dependency
-    # We call the function directly, bypassing FastAPI dependency injection for simplicity if possible,
-    # or we construct the inputs.
-    
-    start_time = time.time()
-    
-    result = await job_router.process_job(
-        job_url="http://test.com",
-        resume_text="Resume Content",
-        is_testing_mode=True,
-        bold_keywords=True
+    # Patch parsers in job_router so we don't replace the real module (which would break other tests)
+    import app.routers.job_router as job_router
+    mock_parsers = MagicMock()
+    mock_parsers.scrape_url = MagicMock(return_value="Job Description")
+    mock_parsers.parse_pdf = AsyncMock(return_value=_mock_parsed_resume())
+    mock_parsers.parse_docx = AsyncMock(return_value=_mock_parsed_resume())
+    mock_parsers.parse_resume_text_to_structure = MagicMock(return_value=_mock_parsed_resume())
+    mock_parsers.extract_contact_from_text = MagicMock(return_value=_mock_extracted_contact())
+    mock_parsers.should_use_ai_sections = MagicMock(return_value=False)
+    mock_parsers.validate_resume_sections = MagicMock(
+        return_value=MagicMock(
+            sections_found=["experience", "education", "skills"],
+            sections_missing=[],
+            optional_missing=[],
+            has_preamble=True,
+            is_valid=True,
+            warnings=[],
+        )
     )
-    
+
+    with patch.object(job_router, "parsers", mock_parsers), patch.object(job_router, "should_use_ai_sections", return_value=False):
+        start_time = time.time()
+
+        result = await job_router.process_job(
+            job_url="http://test.com",
+            resume_text="Resume Content",
+            is_testing_mode=True,
+            bold_keywords=True,
+        )
+
     end_time = time.time()
     duration = end_time - start_time
     

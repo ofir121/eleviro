@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.services import ai_service
 from app.utils import parsers, generators
+from app.utils.parsers import should_use_ai_sections, validate_resume_sections, extract_contact_from_text, is_plausible_phone
 from app.models.suggestions import ResumeSuggestion, SuggestionResponse, ApplyChangesRequest
 import io
 import json
@@ -22,7 +23,8 @@ async def process_job(
     resume_text: Optional[str] = Form(None),
     resume_file: Optional[UploadFile] = File(None),
     is_testing_mode: bool = Form(True),
-    bold_keywords: bool = Form(True)
+    bold_keywords: bool = Form(True),
+    use_ai_sections: bool = Form(False),
 ):
     # 1. Get Job Description
     final_job_desc = ""
@@ -39,29 +41,68 @@ async def process_job(
     task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
     task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
 
-    # 2. Get Resume Text
-    final_resume_text = ""
+    # 2. Get Resume Text (as ParsedResume when possible for section-aware AI decision)
+    parsed_resume = None
     if resume_text:
-        final_resume_text = resume_text
+        parsed_resume = parsers.parse_resume_text_to_structure(resume_text)
+        final_resume_text = parsed_resume.full_text
     elif resume_file and resume_file.filename:  # Check if file actually has a filename
         if resume_file.filename.endswith(".pdf"):
-            final_resume_text = await parsers.parse_pdf(resume_file)
+            parsed_resume = await parsers.parse_pdf(resume_file)
         elif resume_file.filename.endswith(".docx"):
-            final_resume_text = await parsers.parse_docx(resume_file)
+            parsed_resume = await parsers.parse_docx(resume_file)
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF or DOCX.")
+        final_resume_text = parsed_resume.full_text
     else:
         raise HTTPException(status_code=400, detail="Please provide either Resume text or upload a file.")
 
     if not final_job_desc or not final_resume_text:
          raise HTTPException(status_code=400, detail="Could not extract text from inputs.")
 
+    # 2.4 Validate which sections were found in the resume
+    section_validation = validate_resume_sections(parsed_resume) if parsed_resume else None
+    section_validation_payload = (
+        {
+            "sections_found": section_validation.sections_found,
+            "sections_missing": section_validation.sections_missing,
+            "optional_missing": section_validation.optional_missing,
+            "has_preamble": section_validation.has_preamble,
+            "is_valid": section_validation.is_valid,
+            "warnings": section_validation.warnings,
+        }
+        if section_validation is not None
+        else None
+    )
+
+    # 2.5 Optional: refine section structure with AI only when regex detection is weak
+    # (no sections, only one section, or preamble too large)
+    if use_ai_sections and parsed_resume is not None and should_use_ai_sections(parsed_resume):
+        final_resume_text = await ai_service.parse_resume_sections_with_ai(
+            parsed_resume.full_text,
+            existing_sections=parsed_resume.sections if parsed_resume.sections else None,
+            is_testing_mode=is_testing_mode,
+        )
+
     # 3. Format Resume (Must be done before other resume tasks)
     formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
+
+    # Parsed contact (phone, email, location, LinkedIn, portfolio) for fallback and cover letter
+    parsed_contact = extract_contact_from_text(final_resume_text)
+    contact_dict = {
+        "phones": parsed_contact.phones,
+        "emails": parsed_contact.emails,
+        "location": parsed_contact.location,
+        "linkedin_urls": parsed_contact.linkedin_urls,
+        "portfolio_urls": parsed_contact.portfolio_urls,
+        "other_urls": parsed_contact.other_urls,
+    }
     
     # 4. Start Resume-related tasks concurrently
     task_suggestions = asyncio.create_task(ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode))
-    task_cover = asyncio.create_task(ai_service.generate_cover_letter(formatted_resume_text, final_job_desc, is_testing_mode))
+    task_cover = asyncio.create_task(ai_service.generate_cover_letter(
+        formatted_resume_text, final_job_desc, is_testing_mode, contact=contact_dict
+    ))
     task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
 
     # 5. Get Research Results (needed for Job Type & Recruiters)
@@ -172,21 +213,39 @@ async def process_job(
         company_name = "Company"
         role_title = "Role"
 
-    # Parse Candidate Info
+    # Parse Candidate Info (use parsed contact when AI returns empty)
     try:
         candidate_data = json.loads(candidate_info_json)
-        # Handle potential None values if key exists but is null
         raw_name = candidate_data.get("name")
         candidate_name = str(raw_name).strip().title() if raw_name else "Candidate"
-        
         raw_email = candidate_data.get("email")
         candidate_email = str(raw_email).strip().lower() if raw_email else ""
-        
-        candidate_phone = candidate_data.get("phone", "")
+        candidate_phone = (candidate_data.get("phone") or "").strip()
     except (json.JSONDecodeError, AttributeError):
         candidate_name = "Candidate"
         candidate_email = ""
         candidate_phone = ""
+
+    # Reject AI phone if it looks like a date range (e.g. "July 2024 - Present" from layout/OCR confusion)
+    if candidate_phone and not is_plausible_phone(candidate_phone):
+        candidate_phone = ""
+
+    if not candidate_email and parsed_contact.emails:
+        candidate_email = parsed_contact.emails[0].strip().lower()
+    if not candidate_phone and parsed_contact.phones:
+        candidate_phone = parsed_contact.phones[0].strip()
+    # Fallback: re-extract contact from formatted resume (preamble may have contact line)
+    if not candidate_phone or not candidate_email:
+        formatted_contact = extract_contact_from_text(formatted_resume_text)
+        if not candidate_phone and formatted_contact.phones:
+            candidate_phone = formatted_contact.phones[0].strip()
+        if not candidate_email and formatted_contact.emails:
+            candidate_email = formatted_contact.emails[0].strip().lower()
+    candidate_location = (parsed_contact.location or "").strip() if parsed_contact else ""
+    candidate_linkedin = (parsed_contact.linkedin_urls[0] if parsed_contact and parsed_contact.linkedin_urls else "").strip()
+    candidate_portfolio = (parsed_contact.portfolio_urls[0] if parsed_contact and parsed_contact.portfolio_urls else "").strip()
+    if not candidate_portfolio and parsed_contact and parsed_contact.other_urls:
+        candidate_portfolio = parsed_contact.other_urls[0].strip()
 
     return {
         "job_summary": job_summary,
@@ -196,11 +255,15 @@ async def process_job(
         "candidate_name": candidate_name,
         "candidate_email": candidate_email,
         "candidate_phone": candidate_phone,
+        "candidate_location": candidate_location,
+        "candidate_linkedin": candidate_linkedin,
+        "candidate_portfolio": candidate_portfolio,
         "resume_suggestions": resume_suggestions,
         "original_resume": formatted_resume_text,
         "cover_letter": cover_letter,
         "job_description": final_job_desc,
-        "recruiters": recruiters_raw
+        "recruiters": recruiters_raw,
+        "section_validation": section_validation_payload,
     }
 
 @router.post("/download")
