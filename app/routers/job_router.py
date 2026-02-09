@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Form, HTTPException, UploadFile, File, Body
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from app.services import ai_service
 from app.utils import parsers, generators
 from app.utils.parsers import should_use_ai_sections, validate_resume_sections, extract_contact_from_text, is_plausible_phone
@@ -16,6 +16,22 @@ router = APIRouter(
     tags=["job"]
 )
 
+def _form_bool(form_val: Optional[str], default: bool) -> bool:
+    """Parse checkbox/form value to bool. Missing or empty => default."""
+    if form_val is None:
+        return default
+    if isinstance(form_val, bool):
+        return form_val
+    if not hasattr(form_val, "strip"):
+        return default  # e.g. Form() default when called outside request
+    return form_val.strip().lower() in ("true", "1", "yes", "on")
+
+
+async def _const(value):
+    """Return a value asynchronously (for no-op tasks)."""
+    return value
+
+
 @router.post("/process-job")
 async def process_job(
     job_description: Optional[str] = Form(None),
@@ -25,7 +41,19 @@ async def process_job(
     is_testing_mode: bool = Form(True),
     bold_keywords: bool = Form(True),
     use_ai_sections: bool = Form(False),
+    enable_resume_adaptation: Optional[str] = Form("true"),
+    enable_role_summary: Optional[str] = Form("false"),
+    enable_company_research: Optional[str] = Form("false"),
+    enable_cover_letter: Optional[str] = Form("false"),
+    enable_recruiters: Optional[str] = Form("false"),
 ):
+    # Feature flags (checkboxes: "true"/"false" or missing)
+    enable_resume_adaptation = _form_bool(enable_resume_adaptation, True)
+    enable_role_summary = _form_bool(enable_role_summary, False)
+    enable_company_research = _form_bool(enable_company_research, False)
+    enable_cover_letter = _form_bool(enable_cover_letter, False)
+    enable_recruiters = _form_bool(enable_recruiters, False)
+
     # 1. Get Job Description
     final_job_desc = ""
     if job_url:
@@ -37,9 +65,17 @@ async def process_job(
     else:
         raise HTTPException(status_code=400, detail="Please provide either a Job Description text or URL.")
 
-    # [OPTIMIZATION] Start Job-related tasks immediately (don't wait for resume parsing)
-    task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
-    task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
+    # Job-related tasks only when requested
+    if enable_role_summary:
+        task_summary = asyncio.create_task(ai_service.summarize_job(final_job_desc, is_testing_mode))
+    else:
+        task_summary = asyncio.create_task(_const(""))
+
+    run_research = enable_company_research or enable_recruiters
+    if run_research:
+        task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
+    else:
+        task_research = asyncio.create_task(_const("{}"))
 
     # 2. Get Resume Text (as ParsedResume when possible for section-aware AI decision)
     parsed_resume = None
@@ -84,8 +120,12 @@ async def process_job(
             is_testing_mode=is_testing_mode,
         )
 
-    # 3. Format Resume (Must be done before other resume tasks)
-    formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
+    # 3. Format Resume (needed for suggestions, cover letter, or candidate info)
+    need_formatted = enable_resume_adaptation or enable_cover_letter
+    if need_formatted:
+        formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
+    else:
+        formatted_resume_text = final_resume_text
 
     # Parsed contact (phone, email, location, LinkedIn, portfolio) for fallback and cover letter
     parsed_contact = extract_contact_from_text(final_resume_text)
@@ -98,39 +138,48 @@ async def process_job(
         "other_urls": parsed_contact.other_urls,
         "security_clearance": parsed_contact.security_clearance,
     }
-    
-    # 4. Start Resume-related tasks concurrently
-    task_suggestions = asyncio.create_task(ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode))
-    task_cover = asyncio.create_task(ai_service.generate_cover_letter(
-        formatted_resume_text, final_job_desc, is_testing_mode, contact=contact_dict
-    ))
-    task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
 
-    # 5. Get Research Results (needed for Job Type & Recruiters)
-    # We await this now so we can start dependent tasks
+    # 4. Start Resume-related tasks concurrently (only when enabled)
+    if enable_resume_adaptation:
+        task_suggestions = asyncio.create_task(ai_service.suggest_resume_changes(formatted_resume_text, final_job_desc, is_testing_mode))
+    else:
+        task_suggestions = asyncio.create_task(_const('{"suggestions": []}'))
+
+    if enable_cover_letter:
+        task_cover = asyncio.create_task(ai_service.generate_cover_letter(
+            formatted_resume_text, final_job_desc, is_testing_mode, contact=contact_dict
+        ))
+    else:
+        task_cover = asyncio.create_task(_const(""))
+
+    need_candidate_info = enable_resume_adaptation or enable_cover_letter
+    if need_candidate_info:
+        task_info = asyncio.create_task(ai_service.extract_candidate_info(formatted_resume_text, is_testing_mode))
+    else:
+        task_info = asyncio.create_task(_const('{"name": "Candidate", "email": "", "phone": ""}'))
+
+    # 5. Get Research Results (when company research or recruiters enabled)
     try:
         company_research_json = await task_research
-        company_data = json.loads(company_research_json)
+        company_data = json.loads(company_research_json) if company_research_json else {}
         job_type = company_data.get("job_type", "General Role")
         company_name_extracted = company_data.get("company_name", "")
     except Exception as e:
         print(f"Error getting job type/company name: {e}")
-        company_research_json = "{}" # Fallback
+        company_research_json = "{}"
         job_type = "General Role"
         company_name_extracted = ""
 
     # 6. Start Dependent Tasks (Recruiters & Bolding)
-    
-    # Recruiter Search
-    task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
+    if enable_recruiters and company_name_extracted:
+        task_recruiters = asyncio.create_task(ai_service.find_recruiters(company_name_extracted, job_description=final_job_desc, is_testing_mode=is_testing_mode))
+    else:
+        task_recruiters = asyncio.create_task(_const("[]"))
 
-    # Bolding (Now runs in parallel with Suggestions!)
-    if bold_keywords:
-        # Note: We run bolding on formatted_resume_text. Currently we do NOT wait for rewrites.
-        # The merging logic handles applying these bold matches to rewritten text if needed.
+    if enable_resume_adaptation and bold_keywords:
         task_bolding = asyncio.create_task(ai_service.suggest_bold_changes(formatted_resume_text, final_job_desc, job_type, is_testing_mode))
     else:
-        task_bolding = asyncio.create_task(asyncio.sleep(0, result=[]))
+        task_bolding = asyncio.create_task(_const([]))
 
     # 7. Await All Remaining Tasks
     job_summary = await task_summary
@@ -204,7 +253,7 @@ async def process_job(
 
     return {
         "job_summary": job_summary,
-        "company_summary": company_summary,
+        "company_summary": company_summary if enable_company_research else "",
         "company_name": company_name,
         "role_title": role_title,
         "candidate_name": candidate_name,
@@ -218,8 +267,15 @@ async def process_job(
         "original_resume": formatted_resume_text,
         "cover_letter": cover_letter,
         "job_description": final_job_desc,
-        "recruiters": recruiters_raw,
+        "recruiters": recruiters_raw if enable_recruiters else "[]",
         "section_validation": section_validation_payload,
+        "enabled_features": {
+            "resume_adaptation": enable_resume_adaptation,
+            "role_summary": enable_role_summary,
+            "company_research": enable_company_research,
+            "cover_letter": enable_cover_letter,
+            "recruiters": enable_recruiters,
+        },
     }
 
 @router.post("/download")
@@ -447,6 +503,73 @@ class OutreachRequest(BaseModel):
     is_testing_mode: bool = True
     company_name: str = "the company"
     role_title: str = "the role"
+
+
+class GenerateSectionRequest(BaseModel):
+    section: Literal["role_summary", "company_research", "cover_letter", "recruiters"]
+    job_description: str
+    resume_text: str
+    is_testing_mode: bool = True
+    company_name: Optional[str] = None
+    contact: Optional[dict] = None
+
+
+@router.post("/generate-section")
+async def generate_section(request: GenerateSectionRequest):
+    """
+    Generate a single section on demand (e.g. cover letter or job summary)
+    after the initial application pack was generated without that section.
+    """
+    section = request.section
+    job_desc = request.job_description
+    resume_text = request.resume_text
+    is_testing = request.is_testing_mode
+
+    if section == "role_summary":
+        job_summary = await ai_service.summarize_job(job_desc, is_testing)
+        return {"section": "role_summary", "job_summary": job_summary}
+
+    if section == "company_research":
+        company_research_json = await ai_service.research_company(job_desc, is_testing)
+        try:
+            data = json.loads(company_research_json)
+            return {
+                "section": "company_research",
+                "company_summary": data.get("company_summary_markdown", ""),
+                "company_name": data.get("company_name", "Company"),
+                "role_title": data.get("role_title", "Role"),
+            }
+        except json.JSONDecodeError:
+            return {
+                "section": "company_research",
+                "company_summary": "",
+                "company_name": "Company",
+                "role_title": "Role",
+            }
+
+    if section == "cover_letter":
+        contact = request.contact or {}
+        cover_letter = await ai_service.generate_cover_letter(
+            resume_text, job_desc, is_testing, contact=contact
+        )
+        return {"section": "cover_letter", "cover_letter": cover_letter}
+
+    if section == "recruiters":
+        company_name = (request.company_name or "").strip()
+        if not company_name:
+            research_json = await ai_service.research_company(job_desc, is_testing)
+            try:
+                data = json.loads(research_json)
+                company_name = data.get("company_name", "") or "Company"
+            except json.JSONDecodeError:
+                company_name = "Company"
+        recruiters_raw = await ai_service.find_recruiters(
+            company_name, job_description=job_desc, is_testing_mode=is_testing
+        )
+        return {"section": "recruiters", "recruiters": recruiters_raw}
+
+    raise HTTPException(status_code=400, detail=f"Unknown section: {section}")
+
 
 @router.post("/generate-outreach")
 async def generate_outreach_endpoint(request: OutreachRequest):

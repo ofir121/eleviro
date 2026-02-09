@@ -64,6 +64,97 @@ header p {
     margin-bottom: 1.5rem;
 }
 
+/* Settings (collapsible) under resume upload */
+.settings-details {
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background-color: rgba(15, 23, 42, 0.4);
+}
+
+.settings-summary {
+    padding: 0.75rem 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.settings-summary::-webkit-details-marker {
+    display: none;
+}
+
+.settings-summary::before {
+    content: "▶";
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+}
+
+.settings-details[open] .settings-summary::before {
+    transform: rotate(90deg);
+}
+
+.settings-summary:hover {
+    color: var(--accent-color);
+}
+
+.settings-panel {
+    padding: 0 1rem 1rem 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.settings-panel .features-desc {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.settings-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.features-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.features-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+}
+
+.features-grid .feature-item {
+    margin-bottom: 0;
+    flex: 1 1 100%;
+}
+
+@media (min-width: 600px) {
+    .features-grid .feature-item {
+        flex: 1 1 calc(50% - 0.75rem);
+    }
+}
+
+.generate-more-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.generate-more-buttons .action-btn {
+    width: auto;
+}
+
 label {
     display: block;
     margin-bottom: 0.5rem;

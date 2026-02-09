@@ -76,6 +76,11 @@ async def test_process_job_concurrency():
             resume_text="Resume Content",
             is_testing_mode=True,
             bold_keywords=True,
+            enable_resume_adaptation="true",
+            enable_role_summary="true",
+            enable_company_research="true",
+            enable_cover_letter="true",
+            enable_recruiters="true",
         )
 
     end_time = time.time()

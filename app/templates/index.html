@@ -65,21 +65,52 @@
                         </div>
                     </div>
 
-                    <div class="form-group checkbox-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="testing-mode" name="testing_mode" checked>
-                            <span class="checkmark"></span>
-                            Testing Mode (Faster & Cheaper)
-                        </label>
-                    </div>
-
-                    <div class="form-group checkbox-group">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="bold-keywords" name="bold_keywords" checked>
-                            <span class="checkmark"></span>
-                            Bold Keywords (Highlight relevant skills)
-                        </label>
-                    </div>
+                    <!-- Settings (collapsible) -->
+                    <details class="settings-details" id="settings-details">
+                        <summary class="settings-summary">Settings</summary>
+                        <div class="settings-panel">
+                            <p class="features-desc">Choose which outputs to generate and options. Fewer features = faster and cheaper.</p>
+                            <div class="features-grid">
+                                <label class="checkbox-container feature-item">
+                                    <input type="checkbox" id="enable-resume-adaptation" name="enable_resume_adaptation" checked>
+                                    <span class="checkmark"></span>
+                                    Resume adaptation (suggestions + keyword bolding)
+                                </label>
+                                <label class="checkbox-container feature-item">
+                                    <input type="checkbox" id="enable-role-summary" name="enable_role_summary" checked>
+                                    <span class="checkmark"></span>
+                                    Role summary (job description at a glance)
+                                </label>
+                                <label class="checkbox-container feature-item">
+                                    <input type="checkbox" id="enable-company-research" name="enable_company_research" checked>
+                                    <span class="checkmark"></span>
+                                    Company research (overview and context)
+                                </label>
+                                <label class="checkbox-container feature-item">
+                                    <input type="checkbox" id="enable-cover-letter" name="enable_cover_letter" checked>
+                                    <span class="checkmark"></span>
+                                    Cover letter
+                                </label>
+                                <label class="checkbox-container feature-item">
+                                    <input type="checkbox" id="enable-recruiters" name="enable_recruiters" checked>
+                                    <span class="checkmark"></span>
+                                    Recruiters & hiring managers
+                                </label>
+                            </div>
+                            <div class="settings-options">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="testing-mode" name="testing_mode" checked>
+                                    <span class="checkmark"></span>
+                                    Testing Mode (Faster & Cheaper)
+                                </label>
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="bold-keywords" name="bold_keywords" checked>
+                                    <span class="checkmark"></span>
+                                    Bold Keywords (Highlight relevant skills)
+                                </label>
+                            </div>
+                        </div>
+                    </details>
 
                     <button type="submit" id="submit-btn">
                         <span class="btn-text">Generate Application Pack</span>
@@ -98,17 +129,17 @@
 
             <!-- Application Results -->
             <section id="results-section" class="results-section hidden">
-                <div class="result-card">
+                <div class="result-card" data-feature="role_summary">
                     <h2>Job Summary</h2>
                     <div id="job-summary-content" class="content-box"></div>
                 </div>
 
-                <div class="result-card">
+                <div class="result-card" data-feature="company_research">
                     <h2>Company Overview</h2>
                     <div id="company-summary-content" class="content-box"></div>
                 </div>
 
-                <div class="result-card">
+                <div class="result-card" data-feature="resume_adaptation">
                     <div class="card-header">
                         <h2>Resume Suggestions</h2>
                         <div class="bulk-actions">
@@ -137,7 +168,7 @@
                     </div>
                 </div>
 
-                <div class="result-card">
+                <div class="result-card" data-feature="cover_letter">
                     <div class="card-header">
                         <h2>Cover Letter</h2>
                         <button class="download-btn" data-type="cover-letter">Download Word</button>
@@ -146,11 +177,20 @@
                     <div id="cover-letter-content" class="content-box"></div>
                 </div>
 
-                <div class="result-card">
+                <div class="result-card" data-feature="recruiters">
                     <h2>Recruiters & Hiring Managers</h2>
                     <p class="section-desc">Potential points of contact at the company.</p>
                     <div id="recruiters-content" class="recruiters-grid">
                         <!-- Recruiters and hiring managers will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <!-- Generate missing sections -->
+                <div class="result-card generate-more-card hidden" id="generate-more-card">
+                    <h2>Generate more</h2>
+                    <p class="section-desc">These sections were not included in your pack. Generate any of them now.</p>
+                    <div id="generate-more-buttons" class="generate-more-buttons">
+                        <!-- Buttons injected by JS for missing sections -->
                     </div>
                 </div>
 

@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let candidatePortfolio = '';
     let candidateSecurityClearance = '';
     let currentJobDescription = ''; // Store for outreach generation
+    let enabledFeatures = {}; // which sections were requested/generated (role_summary, company_research, cover_letter, recruiters, resume_adaptation)
     let progressInterval;
     let cleanupTimeout;
 
@@ -562,6 +563,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const isTestingMode = document.getElementById('testing-mode').checked;
         formData.append('is_testing_mode', isTestingMode);
 
+        // Feature flags (checkboxes: unchecked = not in FormData, so set explicitly)
+        formData.append('enable_resume_adaptation', document.getElementById('enable-resume-adaptation').checked ? 'true' : 'false');
+        formData.append('enable_role_summary', document.getElementById('enable-role-summary').checked ? 'true' : 'false');
+        formData.append('enable_company_research', document.getElementById('enable-company-research').checked ? 'true' : 'false');
+        formData.append('enable_cover_letter', document.getElementById('enable-cover-letter').checked ? 'true' : 'false');
+        formData.append('enable_recruiters', document.getElementById('enable-recruiters').checked ? 'true' : 'false');
+
         try {
             const response = await fetch('/api/process-job', {
                 method: 'POST',
@@ -673,6 +681,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('resume-preview').innerHTML = '<p style="color: var(--text-secondary);">Accept suggestions to preview changes...</p>';
             }
 
+            // Show/hide result cards based on enabled features
+            enabledFeatures = data.enabled_features || {};
+            document.querySelectorAll('.result-card[data-feature]').forEach(card => {
+                const feature = card.getAttribute('data-feature');
+                const enabled = !!enabledFeatures[feature];
+                card.classList.toggle('hidden', !enabled);
+            });
+
+            renderGenerateMoreButtons();
+
             // Show results
             resultsSection.classList.remove('hidden');
 
@@ -707,4 +725,131 @@ document.addEventListener('DOMContentLoaded', () => {
         div.textContent = text;
         return div.innerHTML;
     }
+
+    const SECTION_LABELS = {
+        role_summary: 'Job summary',
+        company_research: 'Company research',
+        cover_letter: 'Cover letter',
+        recruiters: 'Recruiters & hiring managers'
+    };
+
+    const GENERATABLE_SECTIONS = ['role_summary', 'company_research', 'cover_letter', 'recruiters'];
+
+    function renderGenerateMoreButtons() {
+        const card = document.getElementById('generate-more-card');
+        const container = document.getElementById('generate-more-buttons');
+        if (!card || !container) return;
+        const missing = GENERATABLE_SECTIONS.filter(s => !enabledFeatures[s]);
+        if (missing.length === 0) {
+            card.classList.add('hidden');
+            container.innerHTML = '';
+            return;
+        }
+        card.classList.remove('hidden');
+        container.innerHTML = missing.map(section =>
+            `<button type="button" class="action-btn generate-section-btn" data-section="${section}">Generate ${SECTION_LABELS[section]}</button>`
+        ).join('');
+    }
+
+    function buildContactForCoverLetter() {
+        return {
+            phones: candidatePhone ? [candidatePhone] : [],
+            emails: candidateEmail ? [candidateEmail] : [],
+            location: candidateLocation || null,
+            linkedin_urls: candidateLinkedin ? [candidateLinkedin] : [],
+            portfolio_urls: candidatePortfolio ? [candidatePortfolio] : [],
+            other_urls: [],
+            security_clearance: candidateSecurityClearance || null
+        };
+    }
+
+    function renderRecruitersHTML(recruitersJson) {
+        const recruitersContainer = document.getElementById('recruiters-content');
+        if (!recruitersContainer) return;
+        try {
+            const recruiters = typeof recruitersJson === 'string' ? JSON.parse(recruitersJson) : recruitersJson;
+            if (recruiters && recruiters.length > 0) {
+                recruitersContainer.innerHTML = recruiters.map(r => {
+                    const hasValidUrl = r.url && typeof r.url === 'string' &&
+                        r.url.startsWith('https://www.linkedin.com/in/') && !r.url.includes('...');
+                    return `
+                        <div class="recruiter-card">
+                            <div class="recruiter-header">
+                                <div class="recruiter-name">${escapeHtml(r.name || 'Unknown Name')}</div>
+                                <div class="recruiter-title">${escapeHtml(r.title || 'Recruiter')}</div>
+                            </div>
+                            ${hasValidUrl ? `
+                                <a href="${r.url}" target="_blank" class="recruiter-link">
+                                    <svg viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+                                    View Profile
+                                </a>
+                            ` : `
+                                <span class="recruiter-no-link">No profile link available</span>
+                            `}
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                recruitersContainer.innerHTML = '<p class="text-secondary">No recruiter or hiring manager profiles found for this company.</p>';
+            }
+        } catch (e) {
+            console.error('Error parsing recruiters:', e);
+            recruitersContainer.innerHTML = '<p class="text-secondary">Unable to load contacts.</p>';
+        }
+    }
+
+    document.getElementById('generate-more-buttons')?.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.generate-section-btn');
+        if (!btn || btn.disabled) return;
+        const section = btn.dataset.section;
+        if (!section || !currentJobDescription || !originalResume) {
+            alert('Missing job description or resume. Please generate the application pack first.');
+            return;
+        }
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = 'Generating...';
+        const isTestingMode = document.getElementById('testing-mode').checked;
+        const body = {
+            section,
+            job_description: currentJobDescription,
+            resume_text: originalResume,
+            is_testing_mode: isTestingMode
+        };
+        if (section === 'cover_letter') body.contact = buildContactForCoverLetter();
+        if (section === 'recruiters') body.company_name = companyName;
+        try {
+            const response = await fetch('/api/generate-section', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || response.statusText);
+            }
+            const data = await response.json();
+            if (section === 'role_summary') {
+                document.getElementById('job-summary-content').innerHTML = data.job_summary ? marked.parse(data.job_summary) : '<p>No job summary available</p>';
+            } else if (section === 'company_research') {
+                document.getElementById('company-summary-content').innerHTML = data.company_summary ? marked.parse(data.company_summary) : '<p>No company summary available</p>';
+                if (data.company_name) companyName = data.company_name;
+                if (data.role_title) roleTitle = data.role_title;
+            } else if (section === 'cover_letter') {
+                coverLetterMarkdown = data.cover_letter || '';
+                document.getElementById('cover-letter-content').innerHTML = coverLetterMarkdown ? marked.parse(coverLetterMarkdown) : '<p>No cover letter available</p>';
+            } else if (section === 'recruiters') {
+                renderRecruitersHTML(data.recruiters);
+            }
+            enabledFeatures[section] = true;
+            document.querySelector(`.result-card[data-feature="${section}"]`)?.classList.remove('hidden');
+            renderGenerateMoreButtons();
+        } catch (err) {
+            console.error('Generate section failed:', err);
+            alert(err.message || 'Failed to generate section.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    });
 });
