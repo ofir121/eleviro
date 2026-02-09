@@ -509,6 +509,17 @@ def test_extract_contact_from_text():
     assert (c.portfolio_urls or c.other_urls) and any("jane" in u.lower() or "dev" in u for u in (c.portfolio_urls or []) + (c.other_urls or []))
 
 
+def test_extract_contact_security_clearance():
+    """Security clearance in header is extracted when present."""
+    text = "Jane Doe\nBaltimore, MD\nSecurity Clearance: Secret\n(555) 123-4567\njane@example.com"
+    c = extract_contact_from_text(text)
+    assert c.security_clearance is not None
+    assert "Secret" in c.security_clearance
+    text_no_clearance = "Jane Doe\nBrooklyn, NY\n(555) 123-4567\njane@example.com"
+    c2 = extract_contact_from_text(text_no_clearance)
+    assert c2.security_clearance is None
+
+
 def test_merge_contact_into_preamble_adds_missing():
     preamble = "Jane Doe"
     contact = ExtractedContact(

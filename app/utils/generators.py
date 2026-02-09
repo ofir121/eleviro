@@ -192,6 +192,12 @@ def create_docx(content: str) -> BytesIO:
         # Table detection: must contain pipe, not be a bullet, and we shouldn't be expecting contact info
         # (Contact info might use pipes as separators, so we treat it as text if waiting)
         is_table_row = ('|' in line) and (not line.startswith(('- ', '* ', '• '))) and (not waiting_for_contact_info)
+        # Headline line with no pipe (e.g. certification without date): use same 2-col layout with empty right cell for alignment
+        is_headline_no_pipe = (
+            line.startswith('**') and ',' in line and '|' not in line
+            and not line.startswith(('- ', '* ', '• ')) and not waiting_for_contact_info
+            and len(line) < 120
+        )
         is_bullet = line.startswith(('- ', '* ', '• '))
         
         # New check: Key-Value pair / Skills line starting with bold
@@ -240,18 +246,24 @@ def create_docx(content: str) -> BytesIO:
                 p.paragraph_format.space_before = Pt(6)
                 p.paragraph_format.space_after = Pt(2)
 
-        elif is_table_row:
+        elif is_table_row or is_headline_no_pipe:
             flush_block()
             waiting_for_contact_info = False
-            # Handle Date Alignment (Role | Date)
-            # Split on the LAST pipe to handle cases like "Role | Location | Date"
-            last_pipe_index = line.rfind('|')
+            # Headline with no pipe (e.g. certification/education with no date): same 2-col layout, right empty
+            if is_headline_no_pipe:
+                left_part = line
+                right_part = ''
+            else:
+                # Handle Date Alignment (Role | Date): split on the LAST pipe for "Role | Location | Date"
+                last_pipe_index = line.rfind('|')
+                if last_pipe_index == -1:
+                    left_part = line
+                    right_part = ''
+                else:
+                    left_part = line[:last_pipe_index].strip()
+                    right_part = line[last_pipe_index+1:].strip()
             
-            if last_pipe_index != -1:
-                left_part = line[:last_pipe_index].strip()
-                right_part = line[last_pipe_index+1:].strip()
-                
-                # Check if it's a valid Role/Education line (shouldn't be too long, e.g. > 120 chars)
+            if left_part or right_part:
                 if len(left_part) < 120:
                     table = doc.add_table(rows=1, cols=2)
                     table.autofit = False
@@ -331,11 +343,10 @@ def create_docx(content: str) -> BytesIO:
                     tcW2.set(qn('w:type'), 'dxa')
                     tcPr2.insert(0, tcW2)
                     
-                    # Prevent table from being split across pages
-                    cantSplit = OxmlElement('w:cantSplit')
+                    # Prevent this row from being split across pages (each row needs its own element)
                     for tr in tbl.tr_lst:
                         trPr = tr.get_or_add_trPr()
-                        trPr.append(cantSplit)
+                        trPr.append(OxmlElement('w:cantSplit'))
 
                     # Left Cell (Role)
                     left_cell = table.cell(0, 0)
@@ -355,12 +366,14 @@ def create_docx(content: str) -> BytesIO:
                     right_p.clear()
                     process_text(right_p, right_part)
 
+                    # Keep this row with the following content (e.g. bullet points) so it doesn't orphan
+                    right_p.paragraph_format.keep_with_next = True
                 else:
                     # Fallback if too long
                     p = doc.add_paragraph()
-                    process_text(p, line)
+                    process_text(p, left_part + (' | ' + right_part if right_part else ''))
             else:
-                # Fallback if split fails
+                # Fallback if empty
                 p = doc.add_paragraph()
                 process_text(p, line)
 

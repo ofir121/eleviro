@@ -348,6 +348,7 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
     # Formatting Rules
     1. **Name**: Use # for the Name. Bold and center it.
     2. **Contact Info**: Place contact details (location, phone, email, portfolio/LinkedIn) on a single line directly below the name, separated by · (middle dot). Only include what is explicitly present in the original resume. If only the word "linkedin" appears on it's own remove the word linkedin from the contact info.
+       - If the original resume states a security clearance (e.g. Secret, Top Secret, TS/SCI), include it on this contact line (e.g. Baltimore, MD · Secret · XXX-XXX-XXXX · email@example.com · LinkedIn).
        - CRITICAL: Do NOT add work authorization, visa status, citizenship, or "U.S. Permanent Residence" unless it is explicitly stated in the original resume.
        - Example (only if present in resume): Baltimore, MD · XXX-XXX-XXXX · email@example.com
     3. **Section Headers**: Use ## for headers (Experience, Education, Skills). Bold them.
@@ -369,6 +370,14 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
     7. **Skills**:
        - CRITICAL: Categories should be bolded and underlined (**Skills Category**).
        - CRITICAL: Should not contain sentences or paragraphs. Just a list of skills. Example: **Technical Skills**: [Python, JavaScript, React, Data Analysis]
+    8. **Certifications** (ONLY if the original resume has certifications):
+       - Include a ## Certifications section after Skills.
+       - Format each certification as its own line (like Education), not as bullet points or tables.
+       - ALWAYS use the same format so lines align: **Certification Name**, Issuer | Date. One line per certification.
+       - When the resume has no date for a certification, still use the same format and leave the date empty after the pipe: **Certification Name**, Issuer |
+       - CRITICAL: Do NOT put a bullet point (- or *) before any certification line.
+       - Example with date: **AWS Solutions Architect**, AWS | 2020
+       - Example without date: **CISSP**, (ISC)² |
 
     # Structure (ORDER IS MANDATORY—Professional Summary must be right after contact, never at the end)
     # [Candidate Name]
@@ -387,7 +396,10 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
 
     ## Skills
     (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
-    
+
+    ## Certifications
+    (ONLY if the resume has certifications—each certification as its own line, same style as Education, no bullets.)
+
     ## Publications
     (ONLY if the original resume explicitly lists real publications with real titles. If there are no publications, omit this section entirely. Do not add "Title of Publication" or similar placeholders.)
 
@@ -417,13 +429,14 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     - Keep the text exactly as is, just add formatting.
     - Output ONLY the markdown content.
     - CRITICAL: Do NOT add excessive blank lines. Use at most ONE blank line between sections.
-    - CRITICAL: Section order MUST be: (1) Name and Contact (2) Professional Summary—immediately after contact if the resume has one—(3) Experience (4) Education (5) Skills (6) Publications only if the resume has real publications. Do NOT put Professional Summary at the end of the resume or after Skills.
+    - CRITICAL: Section order MUST be: (1) Name and Contact (2) Professional Summary—immediately after contact if the resume has one—(3) Experience (4) Education (5) Skills (6) Certifications only if the resume has certifications (7) Publications only if the resume has real publications. Do NOT put Professional Summary at the end of the resume or after Skills.
     - CRITICAL: NEVER put bullet points (- or *) before any headline line. A headline is any line containing | (pipe), such as Role | Date or Degree | Date. Only content UNDER headlines should have bullet points.
     - CRITICAL: Include ALL content from the original resume. NEVER use "..." or ellipsis to skip content. Do NOT abbreviate or omit any entries.
 
     # Formatting Rules
     1. **Name**: Use # for the Name. Bold and center it.
     2. **Contact Info**: Place contact details (location, phone, email, portfolio/LinkedIn) on a single line directly below the name, separated by · (middle dot). Only include what is explicitly present in the original resume.
+       - If the original resume states a security clearance (e.g. Secret, Top Secret, TS/SCI), include it on this contact line (e.g. Baltimore, MD · Secret · XXX-XXX-XXXX · email@example.com · LinkedIn).
        - CRITICAL: Do NOT add work authorization, visa status, citizenship, or "U.S. Permanent Residence" unless it is explicitly stated in the original resume.
        - Example (only if present in resume): Baltimore, MD · XXX-XXX-XXXX · email@example.com
     3. **Section Headers**: Use ## for headers. Bold them.
@@ -443,10 +456,16 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     6. **Skills**:
        - Categories should be bolded and underlined (**Skills Category**).
        - FORMAT: The skills are listed in the format **Skills Category**: [Skill 1, Skill 2, ...]
-    7. **Publications**:
+    7. **Certifications** (ONLY if the original resume has certifications):
+       - Include a ## Certifications section after Skills.
+       - Format each certification as its own line (like Education), not as bullet points or tables.
+       - ALWAYS use the same format so lines align: **Certification Name**, Issuer | Date. One line per certification.
+       - When the resume has no date for a certification, still use the same format and leave the date empty after the pipe: **Certification Name**, Issuer |
+       - CRITICAL: Do NOT put a bullet point (- or *) before any certification line.
+    8. **Publications**:
        - CRITICAL: Include a Publications section ONLY if the original resume explicitly lists publications. If the resume has no publications, omit this section entirely. Never invent or add placeholder publications (e.g. "Title of Publication 1").
        - If present, format as a list of bullet points; bold the publication name and the candidate's name.
-    8. **Bullet Points in Experience**:
+    9. **Bullet Points in Experience**:
        - CRITICAL: Preserve ALL bullet points from the original resume.
        - Use - for bullet points.
        - Each experience entry should have its bullet points listed below the role line.
@@ -466,7 +485,10 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
 
     ## Skills
     (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
-    
+
+    ## Certifications
+    (ONLY if the resume has certifications—each certification as its own line, same style as Education, no bullets.)
+
     ## Publications
     (ONLY if the original resume explicitly lists real publications with real titles. If there are no publications, omit this section entirely. Do not add "Title of Publication" or similar placeholders.)
 

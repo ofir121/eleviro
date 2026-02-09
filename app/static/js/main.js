@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let candidateLocation = '';
     let candidateLinkedin = '';
     let candidatePortfolio = '';
+    let candidateSecurityClearance = '';
     let currentJobDescription = ''; // Store for outreach generation
     let progressInterval;
     let cleanupTimeout;
@@ -594,6 +595,7 @@ document.addEventListener('DOMContentLoaded', () => {
             candidateLocation = data.candidate_location || '';
             candidateLinkedin = data.candidate_linkedin || '';
             candidatePortfolio = data.candidate_portfolio || '';
+            candidateSecurityClearance = data.candidate_security_clearance || '';
 
             // Use job description from backend (handles URL scraping properly)
             currentJobDescription = data.job_description || '';
@@ -602,10 +604,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('job-summary-content').innerHTML = data.job_summary ? marked.parse(data.job_summary) : '<p>No job summary available</p>';
             document.getElementById('company-summary-content').innerHTML = data.company_summary ? marked.parse(data.company_summary) : '<p>No company summary available</p>';
 
-            // Candidate contact bar (phone, email, location, LinkedIn, portfolio)
+            // Candidate contact bar (location, security clearance, phone, email, LinkedIn, portfolio)
             const contactBar = document.getElementById('candidate-contact-bar');
             const contactParts = [];
             if (candidateLocation) contactParts.push(`<span>${escapeHtml(candidateLocation)}</span>`);
+            if (candidateSecurityClearance) contactParts.push(`<span class="security-clearance">${escapeHtml(candidateSecurityClearance)}</span>`);
             if (candidatePhone) contactParts.push(`<span>${escapeHtml(candidatePhone)}</span>`);
             if (candidateEmail) contactParts.push(`<a href="mailto:${escapeHtml(candidateEmail)}">${escapeHtml(candidateEmail)}</a>`);
             if (candidateLinkedin) contactParts.push(`<a href="${escapeHtml(candidateLinkedin)}" target="_blank" rel="noopener">LinkedIn</a>`);

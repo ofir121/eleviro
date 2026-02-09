@@ -96,6 +96,7 @@ async def process_job(
         "linkedin_urls": parsed_contact.linkedin_urls,
         "portfolio_urls": parsed_contact.portfolio_urls,
         "other_urls": parsed_contact.other_urls,
+        "security_clearance": parsed_contact.security_clearance,
     }
     
     # 4. Start Resume-related tasks concurrently
@@ -196,6 +197,10 @@ async def process_job(
     candidate_portfolio = (parsed_contact.portfolio_urls[0] if parsed_contact and parsed_contact.portfolio_urls else "").strip()
     if not candidate_portfolio and parsed_contact and parsed_contact.other_urls:
         candidate_portfolio = parsed_contact.other_urls[0].strip()
+    candidate_security_clearance = (parsed_contact.security_clearance or "").strip() if parsed_contact else ""
+    if not candidate_security_clearance:
+        formatted_contact = extract_contact_from_text(formatted_resume_text)
+        candidate_security_clearance = (formatted_contact.security_clearance or "").strip()
 
     return {
         "job_summary": job_summary,
@@ -208,6 +213,7 @@ async def process_job(
         "candidate_location": candidate_location,
         "candidate_linkedin": candidate_linkedin,
         "candidate_portfolio": candidate_portfolio,
+        "candidate_security_clearance": candidate_security_clearance,
         "resume_suggestions": resume_suggestions,
         "original_resume": formatted_resume_text,
         "cover_letter": cover_letter,

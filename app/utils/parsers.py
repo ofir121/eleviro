@@ -264,6 +264,13 @@ _LOCATION_RE = re.compile(
 )
 
 
+# Security clearance: look in header for "Security Clearance: X", "Clearance: X", or standalone level
+_CLEARANCE_PATTERNS = [
+    re.compile(r"security\s+clearance\s*:\s*([^\n·|]+)", re.I),
+    re.compile(r"(?:^|\s)clearance\s*:\s*([^\n·|]+)", re.I),
+    re.compile(r"\b(TS/?SCI|Top\s+Secret|Secret|Confidential)(?:\s+clearance|\s+eligible)?\b", re.I),
+]
+
 @dataclass
 class ExtractedContact:
     """Contact info extracted from resume text."""
@@ -273,6 +280,7 @@ class ExtractedContact:
     portfolio_urls: List[str]
     other_urls: List[str]
     location: Optional[str]
+    security_clearance: Optional[str] = None
 
 
 # Contact info is usually in the first N chars (header); scan full text for phone/email/LinkedIn.
@@ -321,7 +329,10 @@ def extract_contact_from_text(text: str) -> ExtractedContact:
     Phone/email/LinkedIn are taken from full text; location and portfolio/other URLs from header zone.
     """
     if not text or not text.strip():
-        return ExtractedContact(phones=[], emails=[], linkedin_urls=[], portfolio_urls=[], other_urls=[], location=None)
+        return ExtractedContact(
+            phones=[], emails=[], linkedin_urls=[], portfolio_urls=[], other_urls=[],
+            location=None, security_clearance=None,
+        )
     raw_phones = _PHONE_RE.findall(text)
     # Drop 10-digit-only matches that look like years (19xx, 20xx) or invalid US area codes.
     # Also drop any match that looks like a date range (e.g. from OCR/layout noise).
@@ -348,6 +359,15 @@ def extract_contact_from_text(text: str) -> ExtractedContact:
     location = None
     if loc_match:
         location = f"{loc_match.group(1)}, {loc_match.group(2)}"
+    # Security clearance: first match in header wins (prefer explicit "Clearance: X" then level keywords)
+    security_clearance = None
+    header_for_clearance = text[:_CONTACT_HEADER_CHARS]
+    for pat in _CLEARANCE_PATTERNS:
+        m = pat.search(header_for_clearance)
+        if m:
+            security_clearance = m.group(1).strip() if m.lastindex else m.group(0).strip()
+            if security_clearance:
+                break
     return ExtractedContact(
         phones=phones,
         emails=emails,
@@ -355,6 +375,7 @@ def extract_contact_from_text(text: str) -> ExtractedContact:
         portfolio_urls=portfolio_urls,
         other_urls=other_urls[:3],
         location=location,
+        security_clearance=security_clearance,
     )
 
 
