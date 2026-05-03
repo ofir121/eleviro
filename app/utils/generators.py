@@ -192,17 +192,18 @@ def create_docx(content: str) -> BytesIO:
         # Table detection: must contain pipe, not be a bullet, and we shouldn't be expecting contact info
         # (Contact info might use pipes as separators, so we treat it as text if waiting)
         is_table_row = ('|' in line) and (not line.startswith(('- ', '* ', '• '))) and (not waiting_for_contact_info)
+        # New check: Key-Value pair / Skills line starting with bold
+        # e.g. "**Skills:** Python, Java"
+        is_key_value = line.startswith('**') and ':' in line
+
         # Headline line with no pipe (e.g. certification without date): use same 2-col layout with empty right cell for alignment
         is_headline_no_pipe = (
             line.startswith('**') and ',' in line and '|' not in line
             and not line.startswith(('- ', '* ', '• ')) and not waiting_for_contact_info
             and len(line) < 120
+            and not is_key_value
         )
         is_bullet = line.startswith(('- ', '* ', '• '))
-        
-        # New check: Key-Value pair / Skills line starting with bold
-        # e.g. "**Skills:** Python, Java"
-        is_key_value = line.startswith('**') and ':' in line
 
         if is_header:
             flush_block()

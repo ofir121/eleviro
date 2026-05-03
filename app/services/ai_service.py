@@ -168,7 +168,7 @@ async def extract_candidate_info(resume_text: str, is_testing_mode: bool = False
 # Canonical section names used when building full text from AI section JSON.
 # Must match parser canonical order for consistent output.
 _AI_CANONICAL_ORDER = [
-    "preamble", "summary", "experience", "education", "skills",
+    "preamble", "summary", "skills", "experience", "education",
     "publications", "certifications", "projects", "awards", "other",
 ]
 # Map common AI-returned key variants (normalized: lowercase, spaces -> underscores) to canonical.
@@ -361,7 +361,8 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
        - RIGHT: **Software Engineer**, New York | Jan 2020 - Present
     5. **Bullet Points**:
        - Each bullet point MUST start with a bolded headline or key phrase followed by a colon.
-       - Example: **Project Management**: Led a team of 5 developers...
+       - IMPORTANT: Start ALL bullet points with a hyphen dash (`- `).
+       - Example: - **Project Management**: Led a team of 5 developers...
     6. **Education**:
        - Format: **Degree**, [School Name] | [Start Date - End Date]
        - CRITICAL: Do NOT put a bullet point (neither - nor *) before the Degree line.
@@ -387,15 +388,15 @@ async def adapt_resume(resume_text: str, job_description: str, is_testing_mode: 
     ## Professional Summary
     (ONLY if the original resume has a summary—place this section HERE, directly under contact. Do not put it after Experience, Education, or Skills.)
 
+    ## Skills
+    (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
+
     ## Experience
     (List relevant experience using the specified format)
     - (Bullet points highlighting achievements that match the job requirements)
 
     ## Education
     (Brief education section)
-
-    ## Skills
-    (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
 
     ## Certifications
     (ONLY if the resume has certifications—each certification as its own line, same style as Education, no bullets.)
@@ -429,7 +430,7 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     - Keep the text exactly as is, just add formatting.
     - Output ONLY the markdown content.
     - CRITICAL: Do NOT add excessive blank lines. Use at most ONE blank line between sections.
-    - CRITICAL: Section order MUST be: (1) Name and Contact (2) Professional Summary—immediately after contact if the resume has one—(3) Experience (4) Education (5) Skills (6) Certifications only if the resume has certifications (7) Publications only if the resume has real publications. Do NOT put Professional Summary at the end of the resume or after Skills.
+    - CRITICAL: Section order MUST be: (1) Name and Contact (2) Professional Summary—immediately after contact if the resume has one—(3) Skills (4) Experience (5) Education (6) Certifications only if the resume has certifications (7) Publications only if the resume has real publications. Do NOT put Professional Summary at the end of the resume or after Skills.
     - CRITICAL: NEVER put bullet points (- or *) before any headline line. A headline is any line containing | (pipe), such as Role | Date or Degree | Date. Only content UNDER headlines should have bullet points.
     - CRITICAL: Include ALL content from the original resume. NEVER use "..." or ellipsis to skip content. Do NOT abbreviate or omit any entries.
 
@@ -477,14 +478,14 @@ async def format_resume(resume_text: str, is_testing_mode: bool = False) -> str:
     ## Professional Summary
     (ONLY if the original resume has a summary—place this section HERE, directly under contact. Do not put it after Experience, Education, or Skills.)
 
+    ## Skills
+    (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
+
     ## Experience
     (List experience using the specified format)
 
     ## Education
     (Brief education section)
-
-    ## Skills
-    (A compact list in the format **Skills Category**: [Skill 1, Skill 2, ...])
 
     ## Certifications
     (ONLY if the resume has certifications—each certification as its own line, same style as Education, no bullets.)
@@ -590,6 +591,7 @@ async def suggest_resume_changes(resume_text: str, job_description: str, is_test
     - Do not add tools, frameworks, metrics, numbers that are not present in the resume.
     - Do NOT use "<" or ">" symbols in the output content. Use "less than" or "more than" instead to avoid parsing issues.
     - **CRITICAL: Do NOT use markdown bolding (i.e., double asterisks) in the suggested_text**. The formatting is handled by a separate process.
+    - **CRITICAL**: If the original_text starts with a bullet point or dash (e.g. "- " or "* "), the suggested_text MUST ALSO start with the exact same bullet point. Do not lose the bullet point.
 
     # Guidelines for Improvements (High Priority)
     1. **Aggressive Keyword Optimization**: Identify missing hard skills/keywords from the JD and **forcefully** weave them into existing bullet points.
@@ -723,10 +725,10 @@ async def bold_keywords(resume_text: str, job_description: str, job_type: str = 
 
     # Example Transformation
     - JD Requirement (Data Engineer): "Experience with Java, Spring Boot, and Big Data pipelines."
-    - Original: Developed a microservices architecture using Java and Spring Boot that reduced latency by 40%.
-    - Improved: **Developed a microservices architecture** using **Java** and **Spring Boot** that **reduced latency** by 40%.
-    - Original: Led a team of 5 engineers to build a dashboard.
-    - Improved: **Led a team** of 5 engineers to **build a dashboard**.
+    - Original: - Developed a microservices architecture using Java and Spring Boot that reduced latency by 40%.
+    - Improved: - **Developed a microservices architecture** using **Java** and **Spring Boot** that **reduced latency** by 40%.
+    - Original: - Led a team of 5 engineers to build a dashboard.
+    - Improved: - **Led a team** of 5 engineers to **build a dashboard**.
 
     # Input Data
     <resume_text>
