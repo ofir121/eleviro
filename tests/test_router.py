@@ -125,6 +125,59 @@ def test_apply_suggestions_context_before_anchor():
     assert "Second bullet: improved this." in result
 
 
+def test_apply_suggestions_no_partial_word_match():
+    """
+    A truncated original_text ("...combine an") must not match mid-word inside
+    "analytical" and splice the replacement there, stranding "alytical..." as an
+    orphaned fragment (regression for a bug where accepted suggestions produced
+    garbled/duplicated summary text).
+    """
+    original = "We combine analytical and engineering solutions to ship products."
+    suggestion = ResumeSuggestion(
+        id=1,
+        original_text="We combine an",
+        suggested_text="We leverage a",
+        reason="Truncated original_text from AI",
+        section="Summary",
+        priority="high",
+    )
+    result = apply_suggestions_to_text(original, [suggestion])
+    # No match at all (word-boundary anchored) is safer than a mid-word splice
+    # that would produce "We leverage alytical and engineering...".
+    assert result == original
+    assert "We leverage a" not in result
+
+
+def test_apply_suggestions_skips_overlapping_replacement():
+    """
+    Two accepted suggestions whose matched text overlaps must not both apply:
+    naive index-based splicing on stale offsets corrupts the text (duplicated
+    sentences / orphaned fragments). The later-processed overlapping suggestion
+    is skipped and the text is left as the earlier one produced it.
+    """
+    original = "Passionate about bridging the gap between data and engineering to improve society."
+    s1 = ResumeSuggestion(
+        id=1,
+        original_text="Passionate about bridging the gap between data and engineering to improve society.",
+        suggested_text="Passionate about bridging the gap between scientific data, model evaluation, and production engineering to accelerate innovation and improve society.",
+        reason="Full sentence rewrite",
+        section="Summary",
+        priority="high",
+    )
+    s2 = ResumeSuggestion(
+        id=2,
+        original_text="engineering to improve society.",
+        suggested_text="engineering to accelerate innovation.",
+        reason="Overlapping partial rewrite",
+        section="Summary",
+        priority="medium",
+    )
+    result = apply_suggestions_to_text(original, [s1, s2])
+    assert result == s1.suggested_text
+    # No orphaned fragment of the original left behind, and no duplicated sentence.
+    assert result.count("improve society") <= 1
+
+
 def test_candidate_phone_rejects_date_range_and_uses_parsed_fallback():
     """
     When AI returns a date range as phone (e.g. 'July 2024 - Present'), we reject it

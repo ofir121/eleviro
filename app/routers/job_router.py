@@ -424,6 +424,11 @@ def _normalize_whitespace(s: str) -> str:
     return " ".join((s or "").split())
 
 
+def _ranges_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
+    """True if [a_start, a_end) and [b_start, b_end) share any characters."""
+    return a_start < b_end and b_start < a_end
+
+
 def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
     """
     Apply a list of suggestions (dict or Pydantic) to the resume text.
@@ -435,6 +440,15 @@ def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
     - context_before: optional anchor; only matches preceded by this context are replaced.
     - Replacements are applied in reverse order of position to preserve indices.
     - Empty suggested_text is treated as deletion.
+    - Word-boundary anchored: a match can't end/start mid-word, so a truncated
+      original_text (e.g. "...combine an" for "...combine analytical") can't
+      splice into the middle of "analytical" and strand the remainder.
+    - Overlapping matches: if a suggestion's match would overlap a replacement
+      already queued by an earlier-processed suggestion, it's skipped. Applying
+      overlapping edits via index-based splicing corrupts the text (stale
+      offsets after the first splice land inside the wrong characters), which
+      previously produced duplicated/garbled sentences and orphaned word
+      fragments when two accepted suggestions touched the same text.
     """
     modified_text = original_text
     md_sections = _parse_markdown_sections(original_text)
@@ -449,9 +463,18 @@ def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
         if not orig:
             continue
 
-        parts = re.split(r"\s+", orig.strip())
+        stripped_orig = orig.strip()
+        parts = re.split(r"\s+", stripped_orig)
         parts = [re.escape(p) for p in parts if p]
         pattern = r"\s+".join(parts)
+        # Anchor to word boundaries at either edge that starts/ends on a word
+        # character, so we can't match partway into a longer word. Edges that
+        # start with punctuation (e.g. a leading "-" bullet marker) are left
+        # unanchored since \b wouldn't match there anyway.
+        if stripped_orig[:1].isalnum() or stripped_orig[:1] == "_":
+            pattern = r"\b" + pattern
+        if stripped_orig[-1:].isalnum() or stripped_orig[-1:] == "_":
+            pattern = pattern + r"\b"
 
         search_text = original_text
         section_start_offset = 0
@@ -474,6 +497,8 @@ def apply_suggestions_to_text(original_text: str, suggestions: list) -> str:
         for match in matches:
             global_start = section_start_offset + match.start()
             global_end = section_start_offset + match.end()
+            if any(_ranges_overlap(global_start, global_end, rs, re_) for rs, re_, _ in replacements):
+                continue
             replacements.append((global_start, global_end, new_val or ""))
 
     replacements.sort(key=lambda x: x[0], reverse=True)
