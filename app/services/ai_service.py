@@ -15,9 +15,14 @@ api_key = os.getenv("OPENAI_API_KEY")
 
 # Use Langfuse-wrapped AsyncOpenAI client for automatic tracing
 client = langfuse_openai.AsyncOpenAI(api_key=api_key) if api_key else None
-reasoning_model = "gpt-5.4-mini"
-writing_model = "gpt-5.4-mini"
-TESTING_MODEL = "gpt-5.4-nano"
+# gpt-5.6-luna (GA July 2026, repriced July 30 2026) is cheaper on both input and
+# output than gpt-5.4-mini/-nano while scoring higher on published benchmarks, so it
+# replaces all three tiers below. See get_completion() for the explicit
+# reasoning_effort default, which keeps latency/cost in line with the old mini/nano
+# usage (gpt-5.6-luna defaults to "medium" effort, not "low").
+reasoning_model = "gpt-5.6-luna"
+writing_model = "gpt-5.6-luna"
+TESTING_MODEL = "gpt-5.6-luna"
 
 def clean_newlines(text: str) -> str:
     """Remove excessive consecutive newlines, keeping at most one blank line."""
@@ -59,6 +64,10 @@ def _strip_placeholder_publications(md: str) -> str:
 async def get_completion(prompt: str, model: str = writing_model, **kwargs):
     if not client:
         return "Error: OPENAI_API_KEY not found. Please set it in the .env file."
+    # gpt-5.6-luna defaults to reasoning_effort="medium"; for straightforward text
+    # generation (not multi-step reasoning) "low" keeps latency/cost comparable to
+    # the previous gpt-5.4-mini/-nano usage. Callers can still override via kwargs.
+    kwargs.setdefault("reasoning_effort", "low")
     try:
         response = await client.chat.completions.create(
             model=model,
