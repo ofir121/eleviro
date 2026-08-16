@@ -91,6 +91,16 @@ def test_is_section_header_recognizes_education_and_skills():
     assert _is_section_header("Technical Skills") == "skills"
 
 
+def test_is_section_header_recognizes_honors_and_awards():
+    # A combined "Honors and Awards" header must be recognized as its own
+    # "awards" section, not fall through and get merged into the preceding
+    # section (e.g. Education) as ordinary body text.
+    assert _is_section_header("Honors and Awards") == "awards"
+    assert _is_section_header("HONORS AND AWARDS") == "awards"
+    assert _is_section_header("Honors & Awards") == "awards"
+    assert _is_section_header("Awards and Honors") == "awards"
+
+
 def test_is_section_header_rejects_long_lines():
     long_line = "I have 10 years of Experience in software development and leadership."
     assert _is_section_header(long_line) is None
@@ -124,6 +134,25 @@ BS CS, University X 2020.
     assert "Engineer at Acme" in sections["experience"]
     assert "education" in sections
     assert "BS CS" in sections["education"]
+
+
+def test_extract_sections_by_regex_splits_honors_and_awards_from_education():
+    text = """Jane Doe
+jane@email.com
+
+Education
+BS CS, University X 2020.
+
+Honors and Awards
+Dean's List 2019.
+"""
+    preamble, sections = extract_sections_by_regex(text)
+    assert "education" in sections
+    assert "BS CS" in sections["education"]
+    assert "Honors and Awards" not in sections["education"]
+    assert "Dean's List" not in sections["education"]
+    assert "awards" in sections
+    assert "Dean's List" in sections["awards"]
 
 
 def test_extract_sections_by_regex_empty():
@@ -644,3 +673,43 @@ def test_section_extraction_performance():
     preamble, sections = extract_sections_by_regex(cleaned)
     elapsed = time.perf_counter() - start
     assert elapsed < 0.15, f"Section extraction took {elapsed:.3f}s (expected < 0.15s for ~4 pages)"
+
+
+
+
+def test_clean_resume_text_prevents_headline_merge():
+    # Verify that a headline (pipe or date) is not merged into a previous line lacking punctuation
+    text = """Built and maintained a feature store pipeline processing dozens of features daily without punctuation
+Senior Data Scientist, Nucleix, San Diego, CA | MAR 2024 – AUG 2025"""
+    cleaned = clean_resume_text(text)
+
+    # Should not merge the headline into the previous line
+    assert "punctuation\nSenior Data Scientist" in cleaned
+
+
+def test_merge_ocr_into_page_ignores_punctuation_misreads():
+    """
+    OCR commonly misreads separators (e.g. '·' as '-'). If the underlying content is
+    already present via pypdf, the OCR line must not be treated as new/extra content
+    and prepended -- doing so duplicates the contact line and pushes the candidate's
+    name (the real first line) further down the preamble.
+    """
+    from app.utils.parsers import _merge_ocr_into_page
+
+    pypdf_page = (
+        "Ofir Shliefer\n\n"
+        "Gaithersburg, MD ·  973-800-9119 · ofir2793@gmail.com · LinkedIn  ·  U.S. Permanent Residence\n\n"
+        "Accomplished data professional with 7+ years of experience."
+    )
+    # OCR misreads the middle dot '·' as a hyphen.
+    ocr_text = (
+        "Ofir Shliefer\n\n"
+        "Gaithersburg, MD - 973-800-9119 - ofir2793@gmail.com - LinkedIn - U.S. Permanent Residence\n\n"
+        "Accomplished data professional with 7+ years of experience."
+    )
+
+    merged = _merge_ocr_into_page(ocr_text, pypdf_page)
+
+    # The name must remain the first line; the contact line must not be duplicated.
+    assert merged.strip().startswith("Ofir Shliefer")
+    assert merged.count("973-800-9119") == 1

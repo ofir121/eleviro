@@ -35,7 +35,6 @@ async def test_process_job_concurrency():
     # Mock ai_service methods
     ai_service.summarize_job = AsyncMock(side_effect=fast_delay)
     ai_service.research_company = AsyncMock(side_effect=fast_delay_json)
-    ai_service.format_resume = AsyncMock(side_effect=fast_delay)
     ai_service.suggest_resume_changes = AsyncMock(side_effect=fast_delay_json) # returns json structure
     ai_service.generate_cover_letter = AsyncMock(side_effect=fast_delay)
     ai_service.extract_candidate_info = AsyncMock(side_effect=fast_delay_json)
@@ -110,5 +109,4 @@ async def test_process_job_concurrency():
     
     # Verify outputs are present
     assert result["company_name"] == "TestCorp"
-    assert result["original_resume"] == "Done" # format_resume output
-
+    assert "Resume Content" in result["original_resume"] or "Job at Co" in result["original_resume"]

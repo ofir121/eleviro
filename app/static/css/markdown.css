@@ -117,3 +117,21 @@
 .markdown-body tr:nth-child(2n) {
     background-color: rgba(255, 255, 255, 0.02);
 }
+
+.markdown-body .resume-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.markdown-body .resume-entry-title {
+    text-align: left;
+}
+
+.markdown-body .resume-entry-date {
+    text-align: right;
+    white-space: nowrap;
+    color: var(--text-secondary);
+}

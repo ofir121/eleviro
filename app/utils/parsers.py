@@ -107,9 +107,23 @@ def clean_resume_text(text: str) -> str:
         prev_ends_colon = prev.rstrip().endswith(":")
         # Don't join content onto a line that is only a section header
         prev_is_header = _is_section_header(prev) is not None
+        
+        # Heuristic for joining lines: only join if it's obviously a wrapped sentence
+        is_lowercase_start = line_stripped[0].islower() if line_stripped else False
+        prev_ends_punctuation = prev.rstrip()[-1] in {'.', ';', '!', '?'} if prev.rstrip() else False
+        prev_is_short = len(prev.rstrip()) < 60
+        prev_is_headline = "|" in prev or bool(re.search(r"\b(19|20)\d{2}\b", prev))
+        curr_is_headline = "|" in line_stripped or bool(re.search(r"\b(19|20)\d{2}\b", line_stripped))
+        
+        should_join = False
+        if not is_bullet_or_list and not prev_ends_colon and not prev_is_header and not prev_is_headline and not curr_is_headline:
+            if is_lowercase_start:
+                should_join = True
+            elif not prev_ends_punctuation and not prev_is_short:
+                should_join = True
 
-        if result and result[-1] != "\n":
-            if is_bullet_or_list or prev_ends_colon or prev_is_header:
+        if result and result[-1] != "\n" and result[-1] != "\n\n":
+            if not should_join:
                 result.append("\n")
                 result.append(line_stripped)
             else:
@@ -254,13 +268,13 @@ _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 # URLs: LinkedIn, portfolio, personal site
 _LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w\-./]+", re.I)
 _PORTFOLIO_RE = re.compile(
-    r"(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9.]*\.(?:com|io|co|net|me|dev)(?:/[\w\-./?=&#]*)?",
+    r"(?<![@\w\.-])(?:https?://)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9.]*\.(?:com|io|co|net|me|dev)(?:/[\w\-./?=&#]*)?\b",
     re.I,
 )
 _URL_RE = re.compile(r"https?://[^\s<>\"'\s)]+|(?:www\.)[^\s<>\"'\s)]+")
 # Location: "City, ST" or "City, State" or "City | Country" (prefer first ~1200 chars)
 _LOCATION_RE = re.compile(
-    r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([A-Z]{2}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b"
+    r"\b([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*),\s*([A-Z]{2}|[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*)\b"
 )
 
 
@@ -269,6 +283,7 @@ _CLEARANCE_PATTERNS = [
     re.compile(r"security\s+clearance\s*:\s*([^\n·|]+)", re.I),
     re.compile(r"(?:^|\s)clearance\s*:\s*([^\n·|]+)", re.I),
     re.compile(r"\b(TS/?SCI|Top\s+Secret|Secret|Confidential)(?:\s+clearance|\s+eligible)?\b", re.I),
+    re.compile(r"\b(U\.?S\.?\s+Citizen(?:ship)?|U\.?S\.?\s+Permanent\s+Residen(?:ce|t)|Green\s+Card)\b", re.I),
 ]
 
 @dataclass
@@ -650,6 +665,11 @@ def _ocr_first_n_pages(content: bytes, n: int) -> List[str]:
     return result
 
 
+def _normalize_for_match(s: str) -> str:
+    """Lowercase and strip all non-alphanumeric chars for fuzzy line comparison."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
 def _merge_ocr_into_page(ocr_text: str, pypdf_page: str) -> str:
     """
     If OCR found name-like or extra content not in pypdf, merge it into the page text.
@@ -662,9 +682,19 @@ def _merge_ocr_into_page(ocr_text: str, pypdf_page: str) -> str:
         return ocr_text
     ocr_lines = [line.strip() for line in ocr_text.split("\n") if line.strip()]
     pypdf_lines = [line.strip() for line in pypdf_stripped.split("\n") if line.strip()]
+    pypdf_lines_norm = [_normalize_for_match(p) for p in pypdf_lines]
     ocr_top_content = []
     for line in ocr_lines[:8]:
         if line in pypdf_lines or any(line.lower() in p.lower() for p in pypdf_lines):
+            continue
+        # Punctuation-insensitive check: OCR often misreads separators (e.g. "·" as "-"),
+        # which would otherwise defeat the exact/substring dedup checks above and cause
+        # the same contact line to be duplicated (and pushed ahead of the name).
+        norm_line = _normalize_for_match(line)
+        if len(norm_line) > 5 and any(
+            norm_line in p_norm or p_norm in norm_line
+            for p_norm in pypdf_lines_norm if p_norm
+        ):
             continue
         if (
             _looks_like_name_or_header(line)
@@ -755,7 +785,23 @@ def get_text_recursive(element):
     text = []
     if isinstance(element, Paragraph):
         if element.text.strip():
-            text.append(element.text)
+            line = element.text
+            is_list = False
+            try:
+                if element._p.pPr is not None and element._p.pPr.numPr is not None:
+                    is_list = True
+            except Exception:
+                pass
+            try:
+                if hasattr(element, "style") and element.style and hasattr(element.style, "name") and element.style.name and element.style.name.startswith("List"):
+                    is_list = True
+            except Exception:
+                pass
+            
+            if is_list and not (line.strip().startswith("-") or line.strip().startswith("•") or line.strip().startswith("*")):
+                line = "- " + line
+            
+            text.append(line)
         try:
             for txbx in element._p.xpath(".//w:txbxContent"):
                 for child in txbx.iterchildren():

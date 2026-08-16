@@ -82,17 +82,17 @@
                                     Role summary (job description at a glance)
                                 </label>
                                 <label class="checkbox-container feature-item">
-                                    <input type="checkbox" id="enable-company-research" name="enable_company_research" checked>
+                                    <input type="checkbox" id="enable-company-research" name="enable_company_research">
                                     <span class="checkmark"></span>
                                     Company research (overview and context)
                                 </label>
                                 <label class="checkbox-container feature-item">
-                                    <input type="checkbox" id="enable-cover-letter" name="enable_cover_letter" checked>
+                                    <input type="checkbox" id="enable-cover-letter" name="enable_cover_letter">
                                     <span class="checkmark"></span>
                                     Cover letter
                                 </label>
                                 <label class="checkbox-container feature-item">
-                                    <input type="checkbox" id="enable-recruiters" name="enable_recruiters" checked>
+                                    <input type="checkbox" id="enable-recruiters" name="enable_recruiters">
                                     <span class="checkmark"></span>
                                     Recruiters & hiring managers
                                 </label>
@@ -104,7 +104,7 @@
                                     Testing Mode (Faster & Cheaper)
                                 </label>
                                 <label class="checkbox-container">
-                                    <input type="checkbox" id="bold-keywords" name="bold_keywords" checked>
+                                    <input type="checkbox" id="bold-keywords" name="bold_keywords">
                                     <span class="checkmark"></span>
                                     Bold Keywords (Highlight relevant skills)
                                 </label>
@@ -163,8 +163,12 @@
                     </div>
 
                     <div class="preview-section">
-                        <h3>Preview with Accepted Changes</h3>
+                        <h3 style="margin-bottom: 0.2rem;">Preview with Accepted Changes</h3>
+                        <div style="margin-bottom: 1rem;">
+                            <button type="button" id="toggle-markdown-btn" style="background: none; border: none; color: #4f46e5; text-decoration: underline; cursor: pointer; font-size: 0.85rem; padding: 0;">Show Raw Markdown</button>
+                        </div>
                         <div id="resume-preview" class="content-box preview-box"></div>
+                        <textarea id="resume-raw-markdown" class="content-box preview-box hidden" readonly style="font-family: monospace; white-space: pre-wrap; width: 100%; box-sizing: border-box; height: 500px; resize: vertical;"></textarea>
                     </div>
                 </div>
 
@@ -218,7 +222,7 @@
             </section>
         </main>
     </div>
-    <script src="/static/js/main.js?v=1.1"></script>
+    <script src="/static/js/main.js?v=1.2"></script>
 </body>
 
 </html>

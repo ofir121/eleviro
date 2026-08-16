@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Literal
 from app.services import ai_service
-from app.utils import parsers, generators
+from app.utils import parsers, generators, formatters
 from app.utils.parsers import should_use_ai_sections, validate_resume_sections, extract_contact_from_text, is_plausible_phone
 from app.models.suggestions import ResumeSuggestion, SuggestionResponse, ApplyChangesRequest
 import io
@@ -119,13 +119,7 @@ async def process_job(
             existing_sections=parsed_resume.sections if parsed_resume.sections else None,
             is_testing_mode=is_testing_mode,
         )
-
-    # 3. Format Resume (needed for suggestions, cover letter, or candidate info)
-    need_formatted = enable_resume_adaptation or enable_cover_letter
-    if need_formatted:
-        formatted_resume_text = await ai_service.format_resume(final_resume_text, is_testing_mode)
-    else:
-        formatted_resume_text = final_resume_text
+        parsed_resume = parsers.parse_resume_text_to_structure(final_resume_text)
 
     # Parsed contact (phone, email, location, LinkedIn, portfolio) for fallback and cover letter
     parsed_contact = extract_contact_from_text(final_resume_text)
@@ -138,6 +132,18 @@ async def process_job(
         "other_urls": parsed_contact.other_urls,
         "security_clearance": parsed_contact.security_clearance,
     }
+
+    # 3. Format Resume (needed for suggestions, cover letter, or candidate info)
+    need_formatted = enable_resume_adaptation or enable_cover_letter
+    if need_formatted:
+        candidate_name_fallback = parsed_resume.preamble.split('\n')[0].strip() if parsed_resume and parsed_resume.preamble else "Candidate"
+        formatted_resume_text = formatters.build_markdown_resume(
+            parsed_resume=parsed_resume,
+            contact=parsed_contact,
+            candidate_name=candidate_name_fallback
+        ) if parsed_resume else final_resume_text
+    else:
+        formatted_resume_text = final_resume_text
 
     # 4. Start Resume-related tasks concurrently (only when enabled)
     if enable_resume_adaptation:

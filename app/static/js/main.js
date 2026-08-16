@@ -1,3 +1,33 @@
+// Splits resume "Title | Date" headline lines (e.g. "**Role**, Company | JAN 2020 - PRESENT")
+// into a two-column row so the title stays left-aligned and the date right-aligned,
+// matching the layout already produced by the DOCX export.
+function renderResumeMarkdown(markdownText) {
+    if (!markdownText) return '';
+
+    const lines = markdownText.split('\n');
+    const processedLines = lines.map((rawLine) => {
+        const line = rawLine.trim();
+        const isBullet = /^[-*•]\s+/.test(line);
+        const pipeIndex = line.lastIndexOf('|');
+
+        if (isBullet || pipeIndex === -1 || line.length >= 200) {
+            return rawLine;
+        }
+
+        const left = line.slice(0, pipeIndex).trim();
+        const right = line.slice(pipeIndex + 1).trim();
+        if (!left) {
+            return rawLine;
+        }
+
+        const leftHtml = marked.parseInline(left);
+        const rightHtml = marked.parseInline(right);
+        return `<div class="resume-entry-header"><span class="resume-entry-title">${leftHtml}</span><span class="resume-entry-date">${rightHtml}</span></div>`;
+    });
+
+    return marked.parse(processedLines.join('\n'));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('job-form');
     const submitBtn = document.getElementById('submit-btn');
@@ -449,7 +479,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok) {
                 const { modified_resume } = await response.json();
-                previewBox.innerHTML = `<div class="markdown-body">${marked.parse(modified_resume)}</div>`;
+                previewBox.innerHTML = `<div class="markdown-body">${renderResumeMarkdown(modified_resume)}</div>`;
+                const rawMarkdownEl = document.getElementById('resume-raw-markdown');
+                if (rawMarkdownEl) rawMarkdownEl.value = modified_resume;
             }
         } catch (error) {
             console.error('Preview update failed:', error);
@@ -483,6 +515,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         updatePreview();
+    });
+
+    // Toggle Markdown logic
+    document.getElementById('toggle-markdown-btn')?.addEventListener('click', (e) => {
+        const previewBox = document.getElementById('resume-preview');
+        const rawBox = document.getElementById('resume-raw-markdown');
+        const btn = e.target;
+        
+        if (rawBox.classList.contains('hidden')) {
+            // Switch to raw view
+            previewBox.classList.add('hidden');
+            rawBox.classList.remove('hidden');
+            btn.textContent = 'Show Preview';
+        } else {
+            // Switch to rendered view
+            rawBox.classList.add('hidden');
+            previewBox.classList.remove('hidden');
+            btn.textContent = 'Show Raw Markdown';
+        }
     });
 
     // Form submission
@@ -676,9 +727,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Initialize preview with the formatted original resume
             if (originalResume) {
-                document.getElementById('resume-preview').innerHTML = `<div class="markdown-body">${marked.parse(originalResume)}</div>`;
+                document.getElementById('resume-preview').innerHTML = `<div class="markdown-body">${renderResumeMarkdown(originalResume)}</div>`;
+                const rawMarkdownEl = document.getElementById('resume-raw-markdown');
+                if (rawMarkdownEl) rawMarkdownEl.value = originalResume;
             } else {
                 document.getElementById('resume-preview').innerHTML = '<p style="color: var(--text-secondary);">Accept suggestions to preview changes...</p>';
+                const rawMarkdownEl = document.getElementById('resume-raw-markdown');
+                if (rawMarkdownEl) rawMarkdownEl.value = '';
             }
 
             // Show/hide result cards based on enabled features
