@@ -139,6 +139,31 @@ async def research_company(job_description: str, is_testing_mode: bool = False) 
     """
     return await get_completion(prompt, model=model, response_format={"type": "json_object"})
 
+async def extract_job_info(job_description: str, is_testing_mode: bool = False) -> str:
+    """
+    Lightweight extraction of job metadata (no company research/summary).
+    Returns JSON with structure:
+    {
+        "company_name": "...",
+        "role_title": "...",
+        "job_type": "..."
+    }
+    """
+    model = TESTING_MODEL if is_testing_mode else writing_model
+    prompt = f"""
+    Extract the following metadata from the job description.
+
+    # Output Format
+    Return a valid JSON object with the following fields:
+    - "company_name": The name of the hiring company. If not mentioned, use "Unknown Company".
+    - "role_title": The title of the position.
+    - "job_type": The standardized job category (e.g., "Data Scientist", "Backend Engineer", "Sales Rep").
+
+    # Job Description
+    {job_description}
+    """
+    return await get_completion(prompt, model=model, response_format={"type": "json_object"})
+
 async def extract_candidate_info(resume_text: str, is_testing_mode: bool = False) -> str:
     """
     Extract candidate metadata from the resume.

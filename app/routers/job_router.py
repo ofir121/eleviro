@@ -75,7 +75,9 @@ async def process_job(
     if run_research:
         task_research = asyncio.create_task(ai_service.research_company(final_job_desc, is_testing_mode))
     else:
-        task_research = asyncio.create_task(_const("{}"))
+        # Still extract company name / role / job type (cheap call) so download
+        # filenames and bolding context don't fall back to "Company" placeholders.
+        task_research = asyncio.create_task(ai_service.extract_job_info(final_job_desc, is_testing_mode))
 
     # 2. Get Resume Text (as ParsedResume when possible for section-aware AI decision)
     parsed_resume = None

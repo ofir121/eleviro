@@ -55,6 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let progressInterval;
     let cleanupTimeout;
 
+    // Build "Name CV Acme" / "Name Cover Letter Acme"; omit the company when
+    // the backend couldn't identify one (placeholder values).
+    function buildDownloadFilename(docType) {
+        const hasCompany = companyName && companyName !== 'Company' && companyName !== 'Unknown Company';
+        return hasCompany ? `${candidateName} ${docType} ${companyName}` : `${candidateName} ${docType}`;
+    }
+
     // Navigation Menu Logic
     const menuBtn = document.getElementById('menu-btn');
     const dropdownContent = document.getElementById('dropdown-content');
@@ -126,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const content = coverLetterMarkdown;
-            const filename = `${candidateName} Cover Letter ${companyName}`;
+            const filename = buildDownloadFilename('Cover Letter');
 
             const formData = new FormData();
             formData.append('content', content);
@@ -194,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const formData = new FormData();
             formData.append('content', modified_resume);
 
-            const filename = `${candidateName} CV ${companyName}`;
+            const filename = buildDownloadFilename('CV');
             formData.append('filename', filename);
 
             const downloadResponse = await fetch('/api/download', {
